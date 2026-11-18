@@ -1,0 +1,9 @@
+<resources>
+    <style name="Theme.EasyLauncher" parent="android:style/Theme.Material.Light.NoActionBar">
+        <item name="android:fontFamily">sans</item>
+        <item name="android:windowActionModeOverlay">true</item>
+        <item name="android:windowNoTitle">true</item>
+        <item name="android:windowBackground">@color/launch_background</item>
+        <item name="android:colorAccent">#426D87</item>
+    </style>
+</resources>

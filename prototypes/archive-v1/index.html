@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#f5f5f2">
+  <title>EasyLauncher · 交互设计探索</title>
+  <link rel="stylesheet" href="styles.css">
+  <script defer src="app.js"></script>
+</head>
+<body>
+  <header class="site-header">
+    <a class="brand" href="./index.html" aria-label="EasyLauncher 首页"><span class="brand-mark"><i></i><i></i><i></i><i></i></span>EasyLauncher<span class="brand-tag">DESIGN LAB</span></a>
+    <span class="project-label">HONOR TABLET <span>／</span> CONCEPTS 01—05</span>
+    <button id="compare-button" class="quiet-button">方案对比 <span aria-hidden="true">↗</span></button>
+  </header>
+
+  <main>
+    <section class="intro">
+      <div><p class="eyebrow">为大屏，重新想象桌面</p><h1>你的下一张桌面。</h1><p class="intro-copy">熟悉的 iPad 质感，五种不同的打开方式。<br class="mobile-break">选一个方向，点进去体验。</p></div>
+      <div class="intro-meta"><span class="status-dot"></span> 可交互原型<span class="meta-line">横竖屏自适应 · 100% 本地运行</span></div>
+    </section>
+
+    <nav id="concepts" class="concepts" aria-label="桌面设计方案"></nav>
+
+    <section class="workspace" aria-label="方案交互体验">
+      <div class="preview-panel">
+        <div class="preview-toolbar"><div class="preview-title"><span id="preview-number">01</span><strong id="preview-name">浮光</strong><span id="preview-dimension">1200 × 768 dp</span></div><div class="preview-controls"><div class="orientation-group" role="group" aria-label="预览屏幕方向"><button data-orientation="landscape" aria-pressed="true">横屏</button><button data-orientation="portrait" aria-pressed="false">竖屏</button><button data-orientation="auto" aria-pressed="false">自动</button></div><button id="immersive-button" class="icon-button" aria-label="进入全屏体验" title="进入全屏体验">⛶</button></div></div>
+        <div id="preview-stage" class="preview-stage"><div id="device" class="device"><div id="screen" class="screen" data-concept="classic" data-orientation="landscape"><div id="desktop"></div><div id="overlay-root"></div><div id="device-toast" class="device-toast" role="status"></div><button id="home-indicator" class="home-indicator" aria-label="回到桌面"></button></div></div></div>
+        <div class="preview-footer"><span><span class="tiny-dot"></span> 点击图标 · 打开文件夹 · 左右滑动分页 · 长按编辑</span><button id="reset-button" class="text-button">重置此方案 ↺</button></div>
+      </div>
+
+      <aside class="design-note"><div class="note-kicker">DESIGN DIRECTION <span id="note-number">01 / 05</span></div><div class="note-heading"><h2 id="note-name"></h2><span id="note-en"></span></div><p id="note-description" class="note-description"></p><div id="note-tags" class="note-tags"></div><hr><h3>交互重点</h3><div id="interaction-notes" class="interaction-notes"></div><h3>旋转后，布局如何变化</h3><div class="rotation-diagram"><div class="diagram-land"><i></i><i></i><i></i></div><span>⇄</span><div class="diagram-port"><i></i><i></i><i></i></div><p id="rotation-note"></p></div><button id="select-button" class="select-button">选择此方案 <span>↗</span></button><p id="selection-status" class="selection-status" role="status">选择会保存在当前浏览器</p><button id="export-button" class="text-button export-button">导出我的选择 ↓</button></aside>
+    </section>
+
+    <section id="comparison" class="comparison"><div class="section-heading"><div><p class="eyebrow">FIND YOUR FLOW</p><h2>五种气质，同一个 EasyLauncher。</h2></div><p>核心交互可体验；应用内容、小组件数据为演示。</p></div><div class="comparison-scroll"><table><thead><tr><th>设计方向</th><th>桌面结构</th><th>主要交互</th><th>横 → 竖</th><th>适合你，如果…</th></tr></thead><tbody id="comparison-body"></tbody></table></div><p class="implementation-note">原生实现边界：桌面与应用启动可由 Launcher 实现；通知中心、系统最近任务、锁屏与系统级分屏由 MagicOS 管理。H5 中的窗口和控制面板仅用于展示设计。</p></section>
+  </main>
+  <footer class="site-footer"><span>EasyLauncher <span>／</span> com.vincenthu.launcher</span><span>DESIGNED FOR YOUR EVERYDAY.</span></footer>
+  <div id="global-toast" class="global-toast" role="status"></div>
+  <button id="exit-immersive" class="exit-immersive" hidden>退出体验 ×</button>
+</body>
+</html>

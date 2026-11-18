@@ -1,0 +1,27 @@
+#!/bin/sh
+
+#
+# Minimal Gradle wrapper launcher.
+# The wrapper JAR should exist at gradle/wrapper/gradle-wrapper.jar.
+#
+
+APP_HOME=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+CLASSPATH="$APP_HOME/gradle/wrapper/gradle-wrapper.jar"
+
+if [ ! -f "$CLASSPATH" ]; then
+  echo "Missing gradle wrapper jar: $CLASSPATH" >&2
+  echo "Open the project in Android Studio or run 'gradle wrapper' in an environment with Gradle installed." >&2
+  exit 1
+fi
+
+if [ -n "$JAVA_HOME" ]; then
+  JAVACMD="$JAVA_HOME/bin/java"
+else
+  JAVACMD="java"
+fi
+
+exec "$JAVACMD" \
+  -Dorg.gradle.appname=gradlew \
+  -classpath "$CLASSPATH" \
+  org.gradle.wrapper.GradleWrapperMain \
+  "$@"

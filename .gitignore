@@ -1,0 +1,39 @@
+# OS and local editor state
+.DS_Store
+.idea/
+.vscode/
+*.iml
+
+# Dependencies, Gradle caches and generated builds
+node_modules/
+.gradle/
+.kotlin/
+build/
+.cxx/
+.externalNativeBuild/
+captures/
+*.apk
+*.aab
+*.apks
+*.idsig
+*.hprof
+*.log
+
+# Machine-specific SDK settings and signing credentials
+local.properties
+key.properties
+keystore.properties
+*.jks
+*.keystore
+*.p12
+*.pfx
+*.pem
+*.key
+.env
+.env.*
+!.env.example
+
+# Local device captures, temporary scripts and diagnostics
+/qa/
+__pycache__/
+*.py[cod]

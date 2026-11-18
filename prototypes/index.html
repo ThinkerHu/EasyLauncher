@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="theme-color" content="#f4f6fa">
+  <title>EasyLauncher · 回到平板桌面</title>
+  <link rel="stylesheet" href="tablet.css">
+  <script defer src="tablet.js"></script>
+</head>
+<body>
+  <header class="masthead"><a class="brand" href="./"><span class="brand-icon">E<span>·</span></span><span>EasyLauncher<small>TABLET HOME / ROUND 03</small></span></a><span class="header-caption">为每天打开的那一屏设计</span><a class="archive-link" href="archive-v2/index.html">上一轮存档 ↗</a></header>
+  <main>
+    <section class="intro"><div><p class="eyebrow">A FAMILIAR PLACE. YOUR OWN WAY.</p><h1>这才是，平板的桌面<span>。</span></h1><p>图标、常驻栏、文件夹与小组件。十种日常布局，找到最顺手的一种。</p></div><span class="round-tag">10 个方向 <i> / </i> 横竖屏可体验</span></section>
+    <nav id="concepts" class="concepts" aria-label="十种平板桌面方案"></nav>
+    <section class="studio" aria-label="桌面预览与方案选择">
+      <div class="preview">
+        <div class="preview-toolbar"><div class="preview-name"><span id="current-number">01</span><strong id="current-name">云山</strong><span id="dimensions">1200 × 768</span></div><div class="tools"><div id="directions" class="segmented" role="group" aria-label="预览方向"><button data-direction="landscape" aria-pressed="true">横屏</button><button data-direction="portrait" aria-pressed="false">竖屏</button><button data-direction="auto" aria-pressed="false">自动</button></div><button id="fullscreen" class="fullscreen" aria-label="全屏体验">⛶</button></div></div>
+        <div id="stage" class="stage"><div id="frame" class="frame"><div id="screen" class="screen" data-theme="cloud" data-direction="landscape"><div class="wallpaper" aria-hidden="true"><i></i><i></i><i></i></div><div class="statusbar"><span>09:41</span><span>Wi-Fi <b>▰</b> 80%</span></div><div id="home" class="home"></div><div id="dock" class="dock"></div><div class="gesture-bar" aria-hidden="true"></div><div id="overlays"></div><div id="screen-toast" class="screen-toast" role="status"></div></div></div></div>
+        <div class="preview-bottom"><span>点击应用 · 打开文件夹 · 左右翻页 · 长按图标编辑</span><button id="reset">重置演示 ↺</button></div>
+      </div>
+      <aside class="details"><p class="eyebrow">DESIGN <span id="detail-number">01 / 10</span></p><h2 id="detail-title"></h2><p id="detail-subtitle" class="detail-subtitle"></p><p id="detail-description" class="detail-description"></p><div id="tags" class="tags"></div><div class="detail-section"><h3>桌面怎么用</h3><ul id="interactions"></ul></div><div class="detail-section"><h3>横竖屏适配</h3><p id="rotation"></p></div><button id="shortlist" class="secondary" aria-pressed="false">加入候选 ＋</button><button id="select" class="primary">选定这个方向 ↗</button><p id="selection-status" class="selection-status" role="status"></p><button id="export" class="export">导出选择 ↓</button></aside>
+    </section>
+    <section class="comparison"><div class="section-title"><div><p class="eyebrow">CHOOSE YOUR EVERYDAY HOME.</p><h2>外观有区别，操作都熟悉。</h2></div><div id="filters" class="segmented" role="group" aria-label="方案筛选"><button data-filter="all" aria-pressed="true">全部方案</button><button data-filter="shortlist" aria-pressed="false">我的候选 <span id="candidate-count">0</span></button></div></div><div class="table-scroll"><table><thead><tr><th>方案</th><th>布局重点</th><th>适合怎样使用</th><th>横屏 → 竖屏</th><th>候选</th></tr></thead><tbody id="comparison-body"></tbody></table></div><p id="empty" hidden>还没有候选。先体验，再把喜欢的方向加入比较。</p></section>
+    <p class="scope">已选「轻彩」进入 Android 开发。H5 应用、天气与日程为本地示例；原生版读取真实应用，天气卡片提供查看入口。<a href="?design=sunny">查看轻彩 ↗</a> <a href="archive-v1/index.html">第一轮存档 ↗</a></p>
+  </main>
+  <footer><span>EasyLauncher <i>/</i> com.vincenthu.launcher</span><span>MADE FOR A TABLET. DESIGNED FOR EVERY DAY.</span></footer>
+  <div id="toast" class="toast" role="status"></div><button id="exit" class="exit" hidden>退出体验 ×</button>
+</body>
+</html>

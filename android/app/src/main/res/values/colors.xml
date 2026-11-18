@@ -1,0 +1,4 @@
+<resources>
+    <!-- Match the first frame to the cloud palette while Compose is starting. -->
+    <color name="launch_background">#A4BDBB</color>
+</resources>
