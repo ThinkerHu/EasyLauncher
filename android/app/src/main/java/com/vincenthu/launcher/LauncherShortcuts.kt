@@ -18,7 +18,7 @@ internal data class AppShortcutResult(
 )
 
 /** Query afresh on every long press: dynamic shortcuts and the HOME role can change. */
-internal class LauncherShortcuts(context: Context) {
+internal class LauncherShortcuts(private val context: Context) {
     private val launcher = context.applicationContext.getSystemService(LauncherApps::class.java)
     private val iconDensity = context.resources.displayMetrics.densityDpi
 
@@ -50,10 +50,16 @@ internal class LauncherShortcuts(context: Context) {
         }
     }
 
-    fun start(shortcut: AppShortcut): Boolean = try {
+    fun start(shortcut: AppShortcut, source: AppLaunchSource?, motion: Boolean): Boolean = try {
         val service = launcher
         if (service == null || !service.hasShortcutHostPermission()) false
-        else { service.startShortcut(shortcut.info, null, null); true }
+        else {
+            service.startShortcut(shortcut.info, source?.screenBounds(), appLaunchOptions(context, source, motion))
+            shortcut.info.activity?.flattenToString()?.let { id ->
+                (context.findActivity() as? MainActivity)?.homeReturnAnimation?.launched(id, source)
+            }
+            true
+        }
     } catch (_: RuntimeException) {
         false
     }

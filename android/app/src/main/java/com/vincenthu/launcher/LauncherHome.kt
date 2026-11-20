@@ -328,8 +328,14 @@ private fun LauncherHomeContent(model: LauncherModel, homeRequest: Int, widgetHo
             }
         }
     }
-    fun launch(app: LauncherApp) {
-        runCatching { context.startActivity(app.intent()); model.markRecentlyUsed(app.id) }
+    fun launch(app: LauncherApp, source: AppLaunchSource? = null) {
+        runCatching {
+            val intent = app.intent().apply { sourceBounds = source?.screenBounds() }
+            context.startActivity(intent, appLaunchOptions(context, source, motion))
+            (context.findActivity() as? MainActivity)?.homeReturnAnimation?.launched(app.id, source)
+            model.markRecentlyUsed(app.id)
+            overlay = ""
+        }
             .onFailure { message("暂时无法打开${app.label}，请检查应用状态"); model.refresh() }
     }
     fun renameFolder(id: String) { target = id; folderName = model.folders.firstOrNull { it.id == id }?.name.orEmpty(); overlay = "rename" }
@@ -371,7 +377,10 @@ private fun LauncherHomeContent(model: LauncherModel, homeRequest: Int, widgetHo
         if (calendarPermission) calendarEvents = withContext(Dispatchers.IO) { CalendarRepository.today(context) }
     }
     LaunchedEffect(homeRequest) {
-        if (homeRequest > 0) { overlay = ""; query = ""; editing = false; goToPage(0) }
+        if (homeRequest > 0) {
+            overlay = ""; query = ""; editing = false
+            if ((context.findActivity() as? MainActivity)?.homeReturnAnimation?.preservePageOnHome != true) goToPage(0)
+        }
     }
     BackHandler {
         if (overlay.isNotEmpty()) overlay = ""
@@ -530,9 +539,9 @@ private fun LauncherHomeContent(model: LauncherModel, homeRequest: Int, widgetHo
                                                 ) {
                                                     HomeTile(id, appMap, folderMap, iconSize, editing, dragging = draggingId == id,
                                                         onDelete = { deleteTarget = id },
-                                                        onClick = {
+                                                        onClick = { source ->
                                                             if (id.startsWith("folder:")) { target = id; overlay = "folder" }
-                                                            else appMap[id]?.let(::launch)
+                                                            else appMap[id]?.let { launch(it, source) }
                                                         },
                                                         onDragStart = {},
                                                         onDrag = {},
@@ -590,13 +599,13 @@ private fun LauncherHomeContent(model: LauncherModel, homeRequest: Int, widgetHo
                             }
                             if (dockApps.isNotEmpty()) DockDivider()
                             dockApps.forEach { app ->
-                                key(app.id) { AppIcon(app, iconSize, onClick = { launch(app) }) }
+                                key(app.id) { AppIcon(app, iconSize, onClick = { source -> launch(app, source) }) }
                             }
                             if (recentApps.isNotEmpty()) {
                                 DockDivider()
                                 recentApps.forEach { app ->
                                     key(app.id) {
-                                        AppIcon(app, iconSize, onClick = { launch(app) }, description = "最近使用：${app.label}")
+                                        AppIcon(app, iconSize, onClick = { source -> launch(app, source) }, description = "最近使用：${app.label}")
                                     }
                                 }
                             }
@@ -627,7 +636,7 @@ private fun LauncherHomeContent(model: LauncherModel, homeRequest: Int, widgetHo
             Text("${results.size} 个应用 · 长按可添加到桌面", color = Muted, fontSize = 12.sp, modifier = Modifier.padding(vertical = 12.dp))
             if (results.isEmpty()) Text("没有找到应用，换个名称试试。", color = Muted, modifier = Modifier.padding(20.dp))
             LazyVerticalGrid(GridCells.Adaptive(106.dp), modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(20.dp), contentPadding = PaddingValues(bottom = 20.dp)) {
-                items(results, key = { it.id }) { app -> AppTile(app, 64.dp, { launch(app) }, labelColor = Ink) }
+                items(results, key = { it.id }) { app -> AppTile(app, 64.dp, { source -> launch(app, source) }, labelColor = Ink) }
             }
         }
         "rename" -> HomeModal("重命名文件夹", { overlay = "" }, compact = true) {
@@ -644,7 +653,7 @@ private fun LauncherHomeContent(model: LauncherModel, homeRequest: Int, widgetHo
             val folder = folderMap[target]
             HomeModal(folder?.name ?: "文件夹", { overlay = "" }) {
                 LazyVerticalGrid(GridCells.Adaptive(106.dp), modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(22.dp), contentPadding = PaddingValues(vertical = 20.dp)) {
-                    items(folder?.apps.orEmpty().mapNotNull(appMap::get), key = { it.id }) { app -> AppTile(app, 66.dp, { launch(app) }, labelColor = Ink) }
+                    items(folder?.apps.orEmpty().mapNotNull(appMap::get), key = { it.id }) { app -> AppTile(app, 66.dp, { source -> launch(app, source) }, labelColor = Ink) }
                 }
                 TextButton(onClick = { renameFolder(target) }) { Text("重命名文件夹") }
             }
@@ -777,15 +786,16 @@ private fun HomeTile(
     dragging: Boolean = false,
     onDelete: () -> Unit,
     entranceDelayMs: Int = 0,
-    onClick: () -> Unit,
+    onClick: (AppLaunchSource?) -> Unit,
     onDragStart: () -> Unit,
     onDrag: (Offset) -> Unit,
     onDragEnd: () -> Unit,
     onPositioned: (androidx.compose.ui.geometry.Rect) -> Unit
 ) {
     val app = apps[id]
-    if (app != null) AppTile(app, size, onClick, editing, dragging, onDelete, onPositioned, entranceDelayMs, animateEntrance = false)
+    if (app != null) AppTile(app, size, onClick, editing, dragging, onDelete, onPositioned, entranceDelayMs, animateEntrance = false, homeIcon = true)
     else folders[id]?.let { folder ->
+        val launchAnchor = rememberAppLaunchAnchor(folder.apps, priority = 1)
         var coordinates by remember { mutableStateOf<LayoutCoordinates?>(null) }
         val interaction = remember(id) { MutableInteractionSource() }
         val haptic = LocalHapticFeedback.current
@@ -799,14 +809,14 @@ private fun HomeTile(
                         .onGloballyPositioned { coordinates = it; onPositioned(it.boundsInRoot()) }
                         .then(if (editing) Modifier
                             else Modifier.combinedClickable(
-                                interactionSource = interaction, indication = null, onClick = onClick,
+                                interactionSource = interaction, indication = null, onClick = { onClick(null) },
                                 onLongClick = { haptic.performHapticFeedback(HapticFeedbackType.LongPress); openMenu() }
                             ))
                         .semantics { stateDescription = if (editing) "可编辑，拖动可排序" else "" }
                         .padding(5.dp),
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
-                    Box(Modifier.size(size).then(iconModifier)) {
+                    Box(Modifier.size(size).then(iconModifier).onGloballyPositioned { launchAnchor.coordinates = it }.homeReturnLanding(launchAnchor)) {
                         FolderIcon(folder, apps, Modifier.fillMaxSize())
                         if (editing) EditBadge(Modifier.align(Alignment.TopStart), onDelete)
                     }
@@ -890,15 +900,17 @@ private fun DragPreview(
 private fun AppTile(
     app: LauncherApp,
     size: Dp,
-    onClick: () -> Unit,
+    onClick: (AppLaunchSource?) -> Unit,
     editing: Boolean = false,
     dragging: Boolean = false,
     onDelete: () -> Unit = {},
     onPositioned: (androidx.compose.ui.geometry.Rect) -> Unit = {},
     entranceDelayMs: Int = 0,
     animateEntrance: Boolean = true,
-    labelColor: Color = Color.White
+    labelColor: Color = Color.White,
+    homeIcon: Boolean = false
 ) {
+    val launchAnchor = rememberAppLaunchAnchor(if (homeIcon) listOf(app.id) else emptyList())
     var coordinates by remember { mutableStateOf<LayoutCoordinates?>(null) }
     val interaction = remember(app.id) { MutableInteractionSource() }
     val haptic = LocalHapticFeedback.current
@@ -911,7 +923,7 @@ private fun AppTile(
     ) {
         IconMenuAnchor(app.id, preview = {
             Image(app.icon.asImageBitmap(), null, Modifier.fillMaxSize().clip(RoundedCornerShape(22.dp)))
-        }) { openMenu, iconModifier ->
+        }, launchAnchor = launchAnchor) { openMenu, iconModifier ->
             Column(
             Modifier.pressFeedback(interaction, enabled = !editing)
                 .graphicsLayer {
@@ -922,14 +934,14 @@ private fun AppTile(
                     .onGloballyPositioned { coordinates = it; onPositioned(it.boundsInRoot()) }
                     .then(if (editing) Modifier
                         else Modifier.combinedClickable(
-                            interactionSource = interaction, indication = null, onClick = onClick,
+                            interactionSource = interaction, indication = null, onClick = { onClick(launchAnchor.source()) },
                             onLongClick = { haptic.performHapticFeedback(HapticFeedbackType.LongPress); openMenu() }
                         ))
                     .semantics { stateDescription = if (editing) "可编辑，拖动可排序" else "" }
                     .padding(5.dp),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                Box(Modifier.size(size).then(iconModifier)) {
+                Box(Modifier.size(size).then(iconModifier).onGloballyPositioned { launchAnchor.coordinates = it }.homeReturnLanding(launchAnchor)) {
                     Image(app.icon.asImageBitmap(), "应用图标：" + app.label, Modifier.fillMaxSize().clip(RoundedCornerShape(22.dp)))
                     if (editing) EditBadge(Modifier.align(Alignment.TopStart), onDelete)
                 }
@@ -960,17 +972,19 @@ private fun EditBadge(modifier: Modifier = Modifier, onClick: () -> Unit) {
 }
 
 @Composable
-private fun AppIcon(app: LauncherApp, size: Dp, onClick: () -> Unit, description: String = "打开" + app.label) {
+private fun AppIcon(app: LauncherApp, size: Dp, onClick: (AppLaunchSource?) -> Unit, description: String = "打开" + app.label) {
+    val launchAnchor = rememberAppLaunchAnchor(listOf(app.id), priority = 2)
     val interaction = remember(app.id) { MutableInteractionSource() }
     val haptic = LocalHapticFeedback.current
     AnimatedVisibility(visibleState = rememberEntranceState(), enter = fadeIn(tween(200)) + scaleIn(tween(300, easing = LauncherMotion.easeOut), initialScale = .94f)) {
         IconMenuAnchor(app.id, preview = {
             Image(app.icon.asImageBitmap(), null, Modifier.fillMaxSize().clip(RoundedCornerShape(17.dp)))
-        }) { openMenu, iconModifier ->
+        }, launchAnchor = launchAnchor) { openMenu, iconModifier ->
             Box(
-                Modifier.size(size).then(iconModifier).pressFeedback(interaction).clip(RoundedCornerShape(17.dp))
+                Modifier.size(size).then(iconModifier).onGloballyPositioned { launchAnchor.coordinates = it }.homeReturnLanding(launchAnchor)
+                    .pressFeedback(interaction).clip(RoundedCornerShape(17.dp))
                     .combinedClickable(
-                        interactionSource = interaction, indication = null, onClick = onClick,
+                        interactionSource = interaction, indication = null, onClick = { onClick(launchAnchor.source()) },
                         onLongClick = { haptic.performHapticFeedback(HapticFeedbackType.LongPress); openMenu() }
                     )
                     .semantics { contentDescription = description }

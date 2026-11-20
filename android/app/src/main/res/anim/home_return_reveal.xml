@@ -1,0 +1,7 @@
+<!-- Start slightly enlarged so the entire screen stays covered while the
+     desktop gently settles behind the returning app. No transparent edges. -->
+<scale xmlns:android="http://schemas.android.com/apk/res/android"
+    android:fromXScale="1.035" android:toXScale="1"
+    android:fromYScale="1.035" android:toYScale="1"
+    android:pivotX="50%" android:pivotY="50%"
+    android:duration="560" android:interpolator="@interpolator/home_return_ease" />

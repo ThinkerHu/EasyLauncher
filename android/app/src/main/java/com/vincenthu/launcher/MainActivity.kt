@@ -20,6 +20,7 @@ class MainActivity : ComponentActivity() {
     private val model by viewModels<LauncherModel>()
     private val widgetHost by lazy { WidgetHostController(this, model) }
     private val homeRequest = mutableIntStateOf(0)
+    internal val homeReturnAnimation = HomeReturnAnimation(this)
     private val packageReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) { model.refresh() }
     }
@@ -52,13 +53,18 @@ class MainActivity : ComponentActivity() {
     }
     override fun onResume() {
         super.onResume()
+        homeReturnAnimation.onResume()
         model.refresh()
         model.refreshDefaultHome()
     }
-    override fun onStop() { widgetHost.stop(); super.onStop() }
+    override fun onPause() { homeReturnAnimation.onPause(); super.onPause() }
+    override fun onStop() { homeReturnAnimation.onStop(); widgetHost.stop(); super.onStop() }
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
-        if (intent.hasCategory(Intent.CATEGORY_HOME)) homeRequest.intValue++
+        if (intent.hasCategory(Intent.CATEGORY_HOME)) {
+            homeReturnAnimation.onHome(model.reduceMotion)
+            homeRequest.intValue++
+        }
     }
     override fun onDestroy() { widgetHost.cancelPending(); unregisterReceiver(packageReceiver); super.onDestroy() }
 }

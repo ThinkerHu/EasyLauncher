@@ -75,6 +75,7 @@ private val menuLabelFontSize = 14.sp
 internal fun IconMenuAnchor(
     id: String,
     preview: @Composable () -> Unit,
+    launchAnchor: AppLaunchAnchor? = null,
     content: @Composable (openMenu: () -> Unit, iconModifier: Modifier) -> Unit
 ) {
     var expanded by remember(id) { mutableStateOf(false) }
@@ -96,6 +97,9 @@ internal fun IconMenuAnchor(
     val launched = LocalShortcutLaunched.current
     val visibility = rememberEntranceState(visible = expanded)
     val motion = LocalLauncherMotionEnabled.current
+    fun launchSource(): AppLaunchSource? =
+        launchAnchor?.source()
+            ?: if (view.isAttachedToWindow && anchor.width > 0f && anchor.height > 0f) AppLaunchSource(view, anchor) else null
 
     // HOME, app launches, rotation and backgrounding must never leave a stale focus layer.
     LaunchedEffect(homeRequest, configuration.screenWidthDp, configuration.screenHeightDp) { expanded = false }
@@ -222,7 +226,7 @@ internal fun IconMenuAnchor(
                             shortcuts.forEachIndexed { index, shortcut ->
                                 MenuRow(shortcut.label, shortcutIcon = shortcut.icon, symbol = "↗", onClick = {
                                     expanded = false
-                                    if (shortcutService.start(shortcut)) launched(id)
+                                    if (shortcutService.start(shortcut, launchSource(), motion)) launched(id)
                                     else android.widget.Toast.makeText(context, "快捷功能暂不可用，请确认默认桌面和应用状态", android.widget.Toast.LENGTH_SHORT).show()
                                 })
                                 if (index < shortcuts.lastIndex) HorizontalDivider(
