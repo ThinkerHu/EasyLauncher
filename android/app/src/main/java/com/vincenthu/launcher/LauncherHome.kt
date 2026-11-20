@@ -337,19 +337,10 @@ private fun LauncherHomeContent(model: LauncherModel, homeRequest: Int, widgetHo
         val app = model.apps.firstOrNull { it.id == id }
         val folder = model.folders.firstOrNull { it.id == id }
         val entries = buildList {
-            if (!editing) add(IconMenuAction("编辑桌面", { overlay = ""; editing = true }))
-            if (id in model.home) {
-                add(IconMenuAction("调整位置", children = listOf(
-                    IconMenuAction("移到第一页", { model.moveFirst(id); scope.launch { goToPage(0) } }),
-                    IconMenuAction("向前移一位", { model.move(id, -1) }),
-                    IconMenuAction("向后移一位", { model.move(id, 1) })
-                )))
-                add(IconMenuAction("从桌面移除", { model.removeHome(id); message("已移除桌面入口，应用仍在应用库") }, true))
-            } else if (app != null) add(IconMenuAction("添加到桌面", { model.addHome(id); message("已添加到桌面") }))
             if (app != null) {
-                add(IconMenuAction(if (id in model.dock) "移出常驻栏" else "加入常驻栏", {
-                    if (model.toggleDock(id)) message("常驻栏已更新") else message("常驻栏最多 4 个应用，请先移出一个")
-                }))
+                add(IconMenuAction("移除", { deleteTarget = id }, true))
+            }
+            if (app != null) {
                 add(IconMenuAction("应用信息", {
                     runCatching { context.startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, ("package:" + app.packageName).toUri())) }
                         .onFailure { message("无法打开应用信息") }
@@ -394,7 +385,11 @@ private fun LauncherHomeContent(model: LauncherModel, homeRequest: Int, widgetHo
         if (overlay.isEmpty()) (context.findActivity() as? MainActivity)?.updateDesktopSystemBars(night = wallpaperScene?.isDay == false)
     }
 
-    CompositionLocalProvider(LocalIconMenus provides ::menuFor) {
+    CompositionLocalProvider(
+        LocalIconMenus provides ::menuFor,
+        LocalShortcutLaunched provides { id -> model.markRecentlyUsed(id) },
+        LocalIconMenuHomeRequest provides homeRequest
+    ) {
     Box(Modifier.fillMaxSize().onGloballyPositioned { rootCoordinates = it }) {
         WeatherWallpaper(
             colors = colors,
@@ -797,7 +792,7 @@ private fun HomeTile(
         val dragScale by animateFloatAsState(if (dragging) 1.08f else 1f, spring(stiffness = 650f, dampingRatio = 0.82f), label = "folder-drag-scale")
         val dragAlpha by animateFloatAsState(if (dragging) .04f else 1f, tween(if (dragging) 90 else 180), label = "folder-drag-alpha")
         Box(Modifier.widthIn(max = 150.dp).fillMaxWidth(), contentAlignment = Alignment.Center) {
-            IconMenuAnchor(id) { openMenu ->
+            IconMenuAnchor(id, preview = { FolderIcon(folder, apps, Modifier.fillMaxSize()) }) { openMenu, iconModifier ->
                 Column(
                     Modifier.pressFeedback(interaction, enabled = !editing)
                         .graphicsLayer { scaleX = dragScale; scaleY = dragScale; alpha = dragAlpha }
@@ -811,21 +806,30 @@ private fun HomeTile(
                         .padding(5.dp),
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
-                    Box(Modifier.size(size)) {
-                        Surface(shape = RoundedCornerShape(23.dp), color = Color.White.copy(alpha = .58f), modifier = Modifier.fillMaxSize()) {
-                            Column(Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                                repeat(2) { row -> Row(Modifier.weight(1f), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                                    repeat(2) { col -> Box(Modifier.weight(1f).fillMaxHeight()) {
-                                        folder.apps.getOrNull(row * 2 + col)?.let(apps::get)?.let {
-                                            Image(it.icon.asImageBitmap(), null, Modifier.fillMaxSize())
-                                        }
-                                    } }
-                                } }
-                            }
-                        }
+                    Box(Modifier.size(size).then(iconModifier)) {
+                        FolderIcon(folder, apps, Modifier.fillMaxSize())
                         if (editing) EditBadge(Modifier.align(Alignment.TopStart), onDelete)
                     }
                     Text(folder.name, color = Color.White, fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = 8.dp))
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun FolderIcon(folder: HomeFolder, apps: Map<String, LauncherApp>, modifier: Modifier) {
+    Surface(shape = RoundedCornerShape(23.dp), color = Color.White.copy(alpha = .58f), modifier = modifier) {
+        Column(Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            repeat(2) { row ->
+                Row(Modifier.weight(1f), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    repeat(2) { col ->
+                        Box(Modifier.weight(1f).fillMaxHeight()) {
+                            folder.apps.getOrNull(row * 2 + col)?.let(apps::get)?.let {
+                                Image(it.icon.asImageBitmap(), null, Modifier.fillMaxSize())
+                            }
+                        }
+                    }
                 }
             }
         }
@@ -905,7 +909,9 @@ private fun AppTile(
         modifier = Modifier.widthIn(max = 150.dp).fillMaxWidth(),
         enter = fadeIn(tween(180, delayMillis = entranceDelayMs)) + scaleIn(tween(280, delayMillis = entranceDelayMs, easing = LauncherMotion.easeOut), initialScale = .96f)
     ) {
-        IconMenuAnchor(app.id) { openMenu ->
+        IconMenuAnchor(app.id, preview = {
+            Image(app.icon.asImageBitmap(), null, Modifier.fillMaxSize().clip(RoundedCornerShape(22.dp)))
+        }) { openMenu, iconModifier ->
             Column(
             Modifier.pressFeedback(interaction, enabled = !editing)
                 .graphicsLayer {
@@ -923,7 +929,7 @@ private fun AppTile(
                     .padding(5.dp),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                Box(Modifier.size(size)) {
+                Box(Modifier.size(size).then(iconModifier)) {
                     Image(app.icon.asImageBitmap(), "应用图标：" + app.label, Modifier.fillMaxSize().clip(RoundedCornerShape(22.dp)))
                     if (editing) EditBadge(Modifier.align(Alignment.TopStart), onDelete)
                 }
@@ -958,9 +964,11 @@ private fun AppIcon(app: LauncherApp, size: Dp, onClick: () -> Unit, description
     val interaction = remember(app.id) { MutableInteractionSource() }
     val haptic = LocalHapticFeedback.current
     AnimatedVisibility(visibleState = rememberEntranceState(), enter = fadeIn(tween(200)) + scaleIn(tween(300, easing = LauncherMotion.easeOut), initialScale = .94f)) {
-        IconMenuAnchor(app.id) { openMenu ->
+        IconMenuAnchor(app.id, preview = {
+            Image(app.icon.asImageBitmap(), null, Modifier.fillMaxSize().clip(RoundedCornerShape(17.dp)))
+        }) { openMenu, iconModifier ->
             Box(
-                Modifier.size(size).pressFeedback(interaction).clip(RoundedCornerShape(17.dp))
+                Modifier.size(size).then(iconModifier).pressFeedback(interaction).clip(RoundedCornerShape(17.dp))
                     .combinedClickable(
                         interactionSource = interaction, indication = null, onClick = onClick,
                         onLongClick = { haptic.performHapticFeedback(HapticFeedbackType.LongPress); openMenu() }
