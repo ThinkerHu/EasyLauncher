@@ -3,6 +3,10 @@
 package com.vincenthu.launcher
 
 import android.content.res.Configuration
+import android.graphics.Bitmap
+import kotlinx.coroutines.launch
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
@@ -10,9 +14,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
-import androidx.compose.foundation.systemGestureExclusion
 import androidx.compose.foundation.gestures.detectTapGestures
-import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.grid.*
@@ -29,7 +31,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
@@ -65,7 +66,6 @@ internal fun AppDrawerPage(
     appTile: @Composable (LauncherApp, Dp, (AppLaunchSource?) -> Unit) -> Unit
 ) {
     val landscape = LocalConfiguration.current.orientation == Configuration.ORIENTATION_LANDSCAPE
-    val edgeExclusionHalfHeight = with(androidx.compose.ui.platform.LocalDensity.current) { 100.dp.toPx() }
     val appMap = remember(model.apps) { model.apps.associateBy { it.id } }
     val groups = remember(model.apps) {
         model.apps.groupBy { AppLibraryCategories.classify(it.label, it.packageName, it.systemCategory) }
@@ -76,9 +76,26 @@ internal fun AppDrawerPage(
         (recent.mapNotNull(appMap::get) + model.apps).distinctBy { it.packageName }.take(8)
     }
     var selected by rememberSaveable { mutableStateOf<String?>(null) }
+    var groupBackdrop by remember { mutableStateOf<Bitmap?>(null) }
+    var groupOrigin by remember { mutableStateOf<Offset?>(null) }
+    var openingGroup by remember { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
+    val context = LocalContext.current
+    fun openGroup(key: String, origin: Offset?) {
+        if (openingGroup) return
+        openingGroup = true
+        groupOrigin = origin
+        scope.launch {
+            try {
+                groupBackdrop = context.findActivity()?.window?.let { captureIconMenuBackdrop(it) }
+                selected = key
+            } finally { openingGroup = false }
+        }
+    }
     val term = query.trim()
     val selectedCategory = AppLibraryCategory.entries.firstOrNull { it.name == selected }
     val expanded = selected != null
+    val groupOpen = selected != null && selected != "all"
     val selectedApps = when (selected) {
         "recommended" -> suggestions
         "all" -> model.apps
@@ -106,12 +123,12 @@ internal fun AppDrawerPage(
     // Own BACK throughout the full-screen page, including its category root.
     // Do not delegate the root case to the underlying launcher's callback.
     BackHandler { navigateBack() }
-    val currentBack by rememberUpdatedState(::navigateBack)
 
     Box(Modifier.fillMaxSize().background(Color(0xFF205D50))
         .pointerInput(Unit) { detectTapGestures { } }) {
         LibraryGlassWallpaper(Modifier.matchParentSize())
-        BoxWithConstraints(Modifier.fillMaxSize().safeDrawingPadding().imePadding()) {
+        BoxWithConstraints(Modifier.fillMaxSize().safeDrawingPadding().imePadding()
+            .then(if (groupOpen) Modifier.clearAndSetSemantics { } else Modifier)) {
             val width = minOf(maxWidth - if (maxWidth < 420.dp) 28.dp else 48.dp, 660.dp)
             val cardColumns = if (landscape && width >= 580.dp) 4 else 2
             val gap = if (width < 450.dp) 14.dp else 18.dp
@@ -127,7 +144,7 @@ internal fun AppDrawerPage(
                     backDescription = if (term.isNotEmpty()) "退出搜索" else if (expanded) "返回应用库" else "返回桌面"
                 )
                 Spacer(Modifier.height(if (landscape) 16.dp else 18.dp))
-                if (term.isNotEmpty() || expanded) {
+                if (term.isNotEmpty() || selected == "all") {
                     Row(Modifier.fillMaxWidth().padding(bottom = 16.dp), verticalAlignment = Alignment.CenterVertically) {
                         Text(
                             if (term.isNotEmpty()) "搜索结果" else when (selected) {
@@ -167,44 +184,27 @@ internal fun AppDrawerPage(
                             LibraryGroup(
                                 title = "建议", apps = suggestions,
                                 cardHeight = cardHeight, recommended = true,
-                                onOpen = { selected = "recommended" }, onLaunch = onLaunch
+                                onOpen = { origin -> openGroup("recommended", origin) }, onLaunch = onLaunch
                             )
                         }
                         items(AppLibraryCategory.entries.filter { !groups[it].isNullOrEmpty() }, key = { it.name }) { category ->
                             LibraryGroup(
                                 title = category.label, apps = groups.getValue(category), cardHeight = cardHeight,
-                                onOpen = { selected = category.name }, onLaunch = onLaunch
+                                onOpen = { origin -> openGroup(category.name, origin) }, onLaunch = onLaunch
                             )
                         }
                     }
                 }
             }
         }
-        // Dedicated topmost edge strips keep the background tap blocker and
-        // scrollable children from consuming the gesture's initial DOWN event.
-        listOf(1 to Alignment.CenterStart, -1 to Alignment.CenterEnd).forEach { (direction, alignment) ->
-            Box(Modifier.align(alignment).width(28.dp).fillMaxHeight()
-                .systemGestureExclusion { coordinates ->
-                    // Android 10 limits exclusion to 200 dp per edge. Reserve
-                    // the middle segment for this HOME subpage's own BACK.
-                    val half = with(coordinates) { size.height / 2f }
-                    Rect(0f, half - edgeExclusionHalfHeight, coordinates.size.width.toFloat(), half + edgeExclusionHalfHeight)
-                }.pointerInput(direction) {
-                var travel = 0f
-                var handled = false
-                detectHorizontalDragGestures(
-                    onDragStart = { travel = 0f; handled = false },
-                    onHorizontalDrag = { change, amount ->
-                        travel += amount * direction
-                        change.consume()
-                        if (!handled && travel >= 64.dp.toPx()) {
-                            handled = true
-                            currentBack()
-                        }
-                    }
-                )
-            })
-        }
+        ApplicationGroupOverlay(
+            group = selected?.takeIf { groupOpen }?.let {
+                AppGroupPresentation(it, if (it == "recommended") "建议" else selectedCategory?.label.orEmpty(),
+                    selectedApps, groupBackdrop, groupOrigin)
+            },
+            onClose = { selected = null }, appTile = appTile, onLaunch = onLaunch
+        )
+        GroupBackEdges(onBack = ::navigateBack)
     }
 }
 
@@ -290,18 +290,20 @@ private fun LibrarySearch(
 @Composable
 private fun LibraryGroup(
     title: String, apps: List<LauncherApp>, cardHeight: Dp,
-    recommended: Boolean = false, onOpen: () -> Unit,
+    recommended: Boolean = false, onOpen: (Offset?) -> Unit,
     onLaunch: (LauncherApp, AppLaunchSource?) -> Unit
 ) {
     val shape = RoundedCornerShape(22.dp)
+    var origin by remember { mutableStateOf<Offset?>(null) }
+    val open = { onOpen(origin) }
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
         BoxWithConstraints(
-            Modifier.fillMaxWidth().height(cardHeight)
+            Modifier.fillMaxWidth().height(cardHeight).onGloballyPositioned { origin = it.localToRoot(Offset(it.size.width / 2f, it.size.height / 2f)) }
                 .shadow(4.dp, shape, ambientColor = Color.Black.copy(alpha = .08f), spotColor = Color.Black.copy(alpha = .08f))
                 .clip(shape)
                 .background(Brush.verticalGradient(listOf(Color.White.copy(alpha = .15f), Color.White.copy(alpha = .055f), Color(0xFFBCF6E4).copy(alpha = .085f))))
                 .border(1.dp, Brush.linearGradient(listOf(Color.White.copy(alpha = .48f), Color.White.copy(alpha = .08f), Color.White.copy(alpha = .26f))), shape)
-                .clickable(onClickLabel = "查看$title", onClick = onOpen)
+                .clickable(onClickLabel = "查看$title", onClick = open)
                 .semantics { contentDescription = "$title，${apps.size} 个应用" }
                 .padding(14.dp)
         ) {
@@ -314,7 +316,7 @@ private fun LibraryGroup(
                             val index = row * cols + col
                             Box(Modifier.size(tileSize), contentAlignment = Alignment.Center) {
                                 if (!recommended && index == 3 && apps.size > 4) {
-                                    MiniAppCluster(apps.drop(3).take(4), onOpen)
+                                    MiniAppCluster(apps.drop(3).take(4), open)
                                 } else {
                                     apps.getOrNull(index)?.let { LibraryIcon(it, Modifier.fillMaxSize(), onLaunch) }
                                 }
@@ -327,7 +329,7 @@ private fun LibraryGroup(
         // Keep every category reachable even when all four slots contain directly launchable icons.
         Text(title, color = LibraryInk, fontSize = 12.sp, lineHeight = 16.sp, maxLines = 1, overflow = TextOverflow.Ellipsis,
             textAlign = TextAlign.Center,
-            modifier = Modifier.fillMaxWidth().clickable(onClickLabel = "查看$title", onClick = onOpen)
+            modifier = Modifier.fillMaxWidth().clickable(onClickLabel = "查看$title", onClick = open)
                 .padding(top = 6.dp, bottom = 2.dp))
     }
 }

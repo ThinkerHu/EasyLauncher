@@ -100,6 +100,8 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import androidx.lifecycle.repeatOnLifecycle
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
 import java.util.Locale
@@ -227,6 +229,12 @@ private fun LauncherHomeContent(model: LauncherModel, homeRequest: Int, widgetHo
     var target by rememberSaveable { mutableStateOf("") }
     var query by rememberSaveable { mutableStateOf("") }
     var editing by rememberSaveable { mutableStateOf(false) }
+    var folderBackdrop by remember { mutableStateOf<android.graphics.Bitmap?>(null) }
+    var folderOrigin by remember { mutableStateOf<Offset?>(null) }
+    var openingFolder by remember { mutableStateOf(false) }
+    var editFolderOnOpen by remember { mutableStateOf(false) }
+    val latestHomeRequest by rememberUpdatedState(homeRequest)
+    val lifecycle = LocalLifecycleOwner.current.lifecycle
     var folderName by rememberSaveable { mutableStateOf("") }
     var folderMembers by rememberSaveable { mutableStateOf(listOf<String>()) }
     var deleteTarget by rememberSaveable { mutableStateOf<String?>(null) }
@@ -339,7 +347,23 @@ private fun LauncherHomeContent(model: LauncherModel, homeRequest: Int, widgetHo
         }
             .onFailure { message("暂时无法打开${app.label}，请检查应用状态"); model.refresh() }
     }
-    fun renameFolder(id: String) { target = id; folderName = model.folders.firstOrNull { it.id == id }?.name.orEmpty(); overlay = "rename" }
+    fun showFolder(id: String, editTitle: Boolean = false) {
+        if (openingFolder) return
+        openingFolder = true
+        folderOrigin = tileBounds[id]?.center
+        val request = latestHomeRequest
+        scope.launch {
+            try {
+                folderBackdrop = context.findActivity()?.window?.let { captureIconMenuBackdrop(it) }
+                if (request == latestHomeRequest && overlay.isEmpty() && lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)) {
+                    target = id
+                    editFolderOnOpen = editTitle
+                    overlay = "folder"
+                }
+            } finally { openingFolder = false }
+        }
+    }
+    fun renameFolder(id: String) { showFolder(id, editTitle = true) }
     fun menuFor(id: String): IconMenuContent {
         val app = model.apps.firstOrNull { it.id == id }
         val folder = model.folders.firstOrNull { it.id == id }
@@ -542,7 +566,7 @@ private fun LauncherHomeContent(model: LauncherModel, homeRequest: Int, widgetHo
                                                     HomeTile(id, appMap, folderMap, iconSize, editing, dragging = draggingId == id,
                                                         onDelete = { deleteTarget = id },
                                                         onClick = { source ->
-                                                            if (id.startsWith("folder:")) { target = id; overlay = "folder" }
+                                                            if (id.startsWith("folder:")) showFolder(id)
                                                             else appMap[id]?.let { launch(it, source) }
                                                         },
                                                         onDragStart = {},
@@ -629,7 +653,18 @@ private fun LauncherHomeContent(model: LauncherModel, homeRequest: Int, widgetHo
         )
     }
 
-    LauncherOverlay(overlay = overlay, onDismiss = { overlay = "" }) { displayedOverlay ->
+    val openFolder = folderMap[target]?.takeIf { overlay == "folder" }
+    ApplicationGroupOverlay(
+        group = openFolder?.let {
+            AppGroupPresentation(it.id, it.name, it.apps.mapNotNull(appMap::get), folderBackdrop, folderOrigin)
+        },
+        onClose = { overlay = "" },
+        onRename = { name -> model.renameFolder(target, name); editFolderOnOpen = false },
+        startEditing = editFolderOnOpen,
+        appTile = { app, size, onClick -> AppTile(app, size, onClick, animateEntrance = false) },
+        onLaunch = { app, source -> launch(app, source) }
+    )
+    LauncherOverlay(overlay = if (overlay == "folder") "" else overlay, onDismiss = { overlay = "" }) { displayedOverlay ->
     when (displayedOverlay) {
         "drawer" -> AppDrawerPage(
             model = model,
@@ -641,25 +676,6 @@ private fun LauncherHomeContent(model: LauncherModel, homeRequest: Int, widgetHo
                 AppTile(app, size, onClick, labelColor = Color.White, animateEntrance = false)
             }
         )
-        "rename" -> HomeModal("重命名文件夹", { overlay = "" }, compact = true) {
-            OutlinedTextField(
-                value = folderName, onValueChange = { folderName = it.take(16) },
-                singleLine = true, label = { Text("文件夹名称") }, modifier = Modifier.fillMaxWidth()
-            )
-            Button(
-                onClick = { model.renameFolder(target, folderName); overlay = "" },
-                enabled = folderName.isNotBlank(), modifier = Modifier.fillMaxWidth().padding(top = 16.dp)
-            ) { Text("保存") }
-        }
-        "folder" -> {
-            val folder = folderMap[target]
-            HomeModal(folder?.name ?: "文件夹", { overlay = "" }) {
-                LazyVerticalGrid(GridCells.Adaptive(106.dp), modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(22.dp), contentPadding = PaddingValues(vertical = 20.dp)) {
-                    items(folder?.apps.orEmpty().mapNotNull(appMap::get), key = { it.id }) { app -> AppTile(app, 66.dp, { source -> launch(app, source) }, labelColor = Ink) }
-                }
-                TextButton(onClick = { renameFolder(target) }) { Text("重命名文件夹") }
-            }
-        }
         "create" -> HomeModal("新建文件夹", { overlay = "" }) {
             OutlinedTextField(value = folderName, onValueChange = { folderName = it.take(16) }, modifier = Modifier.fillMaxWidth(), singleLine = true, label = { Text("文件夹名称") }, placeholder = { Text("例如：工作、影音") })
             Text("选择至少 2 个应用 · 已选 ${folderMembers.size} 个", color = Muted, fontSize = 13.sp, modifier = Modifier.padding(vertical = 14.dp))
