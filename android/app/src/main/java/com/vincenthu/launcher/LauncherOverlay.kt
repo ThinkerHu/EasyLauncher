@@ -5,10 +5,13 @@ import android.content.Context
 import android.content.ContextWrapper
 import android.view.WindowManager
 import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.togetherWith
 import androidx.compose.animation.core.MutableTransitionState
 import androidx.compose.animation.core.animateFloat
@@ -39,6 +42,29 @@ internal fun LauncherOverlay(
 ) {
     val motion = LocalLauncherMotionEnabled.current
     val hostWindow = LocalView.current.context.findActivity()?.window
+    val drawerVisibility = remember { MutableTransitionState(false) }
+    LaunchedEffect(overlay) { drawerVisibility.targetState = overlay == "drawer" }
+    if (overlay == "drawer" || drawerVisibility.currentState || drawerVisibility.targetState || !drawerVisibility.isIdle) {
+        DisposableEffect(hostWindow) {
+            val bars = hostWindow?.let { WindowInsetsControllerCompat(it, it.decorView) }
+            val oldStatus = bars?.isAppearanceLightStatusBars
+            val oldNavigation = bars?.isAppearanceLightNavigationBars
+            bars?.isAppearanceLightStatusBars = false
+            bars?.isAppearanceLightNavigationBars = false
+            onDispose {
+                if (oldStatus != null) bars.isAppearanceLightStatusBars = oldStatus
+                if (oldNavigation != null) bars.isAppearanceLightNavigationBars = oldNavigation
+            }
+        }
+        AnimatedVisibility(
+            visibleState = drawerVisibility,
+            enter = fadeIn(tween(if (motion) 220 else 0)) +
+                slideInVertically(tween(if (motion) 380 else 0, easing = LauncherMotion.easeOut)) { if (motion) it / 12 else 0 },
+            exit = fadeOut(tween(if (motion) 180 else 0)) +
+                slideOutVertically(tween(if (motion) 230 else 0, easing = LauncherMotion.easeOut)) { if (motion) it / 16 else 0 }
+        ) { content("drawer") }
+        return
+    }
     // Full-screen pages share the activity's edge-to-edge window. This avoids
     // vendor dialog windows overriding icon contrast or exposing the wallpaper
     // below the gesture area, and lets IME insets resize the city results.

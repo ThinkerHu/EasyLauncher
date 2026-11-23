@@ -63,7 +63,7 @@ internal fun WeatherWallpaper(
 }
 
 @Composable
-private fun rememberWallpaperPowerSave(): Boolean {
+internal fun rememberWallpaperPowerSave(): Boolean {
     val context = LocalContext.current
     val manager = remember(context) { context.getSystemService(PowerManager::class.java) }
     var powerSave by remember(manager) { mutableStateOf(manager?.isPowerSaveMode == true) }

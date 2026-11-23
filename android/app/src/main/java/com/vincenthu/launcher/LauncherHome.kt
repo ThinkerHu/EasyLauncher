@@ -81,6 +81,7 @@ import androidx.compose.ui.layout.LayoutCoordinates
 import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
@@ -399,7 +400,8 @@ private fun LauncherHomeContent(model: LauncherModel, homeRequest: Int, widgetHo
         LocalShortcutLaunched provides { id -> model.markRecentlyUsed(id) },
         LocalIconMenuHomeRequest provides homeRequest
     ) {
-    Box(Modifier.fillMaxSize().onGloballyPositioned { rootCoordinates = it }) {
+    Box(Modifier.fillMaxSize().onGloballyPositioned { rootCoordinates = it }
+        .then(if (overlay.isNotEmpty()) Modifier.clearAndSetSemantics { } else Modifier)) {
         WeatherWallpaper(
             colors = colors,
             scene = wallpaperScene,
@@ -629,16 +631,16 @@ private fun LauncherHomeContent(model: LauncherModel, homeRequest: Int, widgetHo
 
     LauncherOverlay(overlay = overlay, onDismiss = { overlay = "" }) { displayedOverlay ->
     when (displayedOverlay) {
-        "drawer" -> HomeModal("全部应用", { overlay = "" }) {
-            OutlinedTextField(value = query, onValueChange = { query = it }, modifier = Modifier.fillMaxWidth(),
-                singleLine = true, placeholder = { Text("搜索应用名称") }, shape = RoundedCornerShape(18.dp))
-            val results = model.apps.filter { it.label.contains(query.trim(), true) || it.packageName.contains(query.trim(), true) }
-            Text("${results.size} 个应用 · 长按可添加到桌面", color = Muted, fontSize = 12.sp, modifier = Modifier.padding(vertical = 12.dp))
-            if (results.isEmpty()) Text("没有找到应用，换个名称试试。", color = Muted, modifier = Modifier.padding(20.dp))
-            LazyVerticalGrid(GridCells.Adaptive(106.dp), modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(20.dp), contentPadding = PaddingValues(bottom = 20.dp)) {
-                items(results, key = { it.id }) { app -> AppTile(app, 64.dp, { source -> launch(app, source) }, labelColor = Ink) }
+        "drawer" -> AppDrawerPage(
+            model = model,
+            query = query,
+            onQueryChange = { query = it },
+            onClose = { overlay = "" },
+            onLaunch = { app, source -> launch(app, source) },
+            appTile = { app, size, onClick ->
+                AppTile(app, size, onClick, labelColor = Color.White, animateEntrance = false)
             }
-        }
+        )
         "rename" -> HomeModal("重命名文件夹", { overlay = "" }, compact = true) {
             OutlinedTextField(
                 value = folderName, onValueChange = { folderName = it.take(16) },
@@ -1480,7 +1482,7 @@ private fun HomeModal(title: String, onClose: () -> Unit, compact: Boolean = fal
 }
 
 @Composable
-private fun Modifier.pressFeedback(interaction: MutableInteractionSource, enabled: Boolean = true): Modifier {
+internal fun Modifier.pressFeedback(interaction: MutableInteractionSource, enabled: Boolean = true): Modifier {
     val pressed by interaction.collectIsPressedAsState()
     val motion = LocalLauncherMotionEnabled.current
     val scale by animateFloatAsState(if (pressed && motion && enabled) .94f else 1f, LauncherMotion.layer(motion), label = "icon-press")

@@ -26,7 +26,13 @@ import org.json.JSONObject
 import java.text.Collator
 import java.util.Locale
 
-data class LauncherApp(val id: String, val label: String, val packageName: String, val icon: Bitmap) {
+data class LauncherApp(
+    val id: String,
+    val label: String,
+    val packageName: String,
+    val icon: Bitmap,
+    val systemCategory: Int = android.content.pm.ApplicationInfo.CATEGORY_UNDEFINED
+) {
     fun intent(): Intent = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER)
         .setComponent(ComponentName.unflattenFromString(id))
         .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED)
@@ -80,7 +86,10 @@ class LauncherModel(application: Application) : AndroidViewModel(application) {
                             val component = ComponentName(info.activityInfo.packageName, info.activityInfo.name)
                             val bitmap = createBitmap(144, 144, Bitmap.Config.ARGB_8888)
                             info.loadIcon(pm).apply { setBounds(0, 0, 144, 144); draw(Canvas(bitmap)) }
-                            LauncherApp(component.flattenToString(), info.loadLabel(pm).toString(), info.activityInfo.packageName, bitmap)
+                            LauncherApp(
+                                component.flattenToString(), info.loadLabel(pm).toString(),
+                                info.activityInfo.packageName, bitmap, info.activityInfo.applicationInfo.category
+                            )
                         }.distinctBy { it.id }.sortedWith { a, b -> collator.compare(a.label, b.label) }
                 }
                 apps = found

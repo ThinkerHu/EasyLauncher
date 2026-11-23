@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <title>EasyLauncher · 全屏应用列表</title>
+  <link rel="stylesheet" href="drawer.css">
+  <script src="drawer.js" defer></script>
+</head>
+<body>
+  <header class="preview-controls">
+    <strong>全屏应用列表</strong>
+    <nav aria-label="设计方案">
+      <button data-mode="index">01 字母索引</button>
+      <button data-mode="recent">02 磨砂与最近使用</button>
+      <button data-mode="category">03 分类导航</button>
+    </nav>
+    <nav aria-label="预览方向">
+      <button data-direction="landscape">横屏</button>
+      <button data-direction="portrait">竖屏</button>
+    </nav>
+  </header>
+  <main class="stage">
+    <div class="frame">
+      <section class="screen" aria-label="平板应用列表预览">
+        <div class="system-bar" aria-hidden="true">
+          <time>09:41</time>
+          <div class="system-icons"><i class="wifi"></i><span>86%</span><i class="battery"></i></div>
+        </div>
+        <header class="drawer-header">
+          <h1>全部应用</h1>
+          <label class="search"><i class="magnifier" aria-hidden="true"></i>
+            <input type="search" aria-label="搜索应用" placeholder="搜索应用" autocomplete="off">
+          </label>
+        </header>
+        <div class="drawer-body"></div>
+        <div class="home-indicator" aria-hidden="true"></div>
+      </section>
+    </div>
+  </main>
+</body>
+</html>

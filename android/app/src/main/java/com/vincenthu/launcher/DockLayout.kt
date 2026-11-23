@@ -8,11 +8,16 @@ internal object DockHistory {
     fun record(history: List<String>, id: String): List<String> =
         (listOf(id) + history).filter(String::isNotBlank).distinctBy(::packageOf).take(HISTORY_LIMIT)
 
-    fun visible(history: List<String>, installed: Collection<String>, pinned: Collection<String>): List<String> {
+    fun visible(
+        history: List<String>,
+        installed: Collection<String>,
+        pinned: Collection<String>,
+        limit: Int = VISIBLE_LIMIT
+    ): List<String> {
         val available = installed.toSet()
         val pinnedPackages = pinned.map(::packageOf).toSet()
         return history.asSequence().filter { it in available && packageOf(it) !in pinnedPackages }
-            .distinctBy(::packageOf).take(VISIBLE_LIMIT).toList()
+            .distinctBy(::packageOf).take(limit.coerceIn(0, HISTORY_LIMIT)).toList()
     }
 
     private fun packageOf(id: String) = id.substringBefore('/')
