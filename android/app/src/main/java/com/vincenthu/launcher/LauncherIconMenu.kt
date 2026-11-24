@@ -174,8 +174,8 @@ internal fun IconMenuAnchor(
                 val menuWidth = minOf(200.dp, maxWidth - 24.dp)
                 val menuWidthPx = with(density) { menuWidth.roundToPx() }
                 val shortcuts = shortcutResult?.shortcuts.orEmpty()
-                val appFooter = submenu == null && menu.actions.size == 2 &&
-                    menu.actions.map { it.label }.toSet() == setOf("移除", "应用信息")
+                val appFooter = submenu == null && menu.actions.isNotEmpty() &&
+                    menu.actions.all { it.label in setOf("移除", "应用信息") }
                 val estimatedRows = if (appFooter) shortcuts.size else menu.actions.size + if (submenu != null) 1 else shortcuts.size
                 val naturalHeight = with(density) {
                     (49.dp * estimatedRows + (if (appFooter) 2.dp else 10.dp) +

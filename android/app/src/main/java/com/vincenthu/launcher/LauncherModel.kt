@@ -189,6 +189,14 @@ class LauncherModel(application: Application) : AndroidViewModel(application) {
         save()
         return true
     }
+    fun moveHomeIntoFolder(appId: String, folderId: String): Boolean {
+        if (apps.none { it.id == appId }) return false
+        val result = HomeFolderDrop.move(home, folders, appId, folderId) ?: return false
+        folders = result.folders
+        home = result.home
+        save()
+        return true
+    }
     fun createFolder(name: String, selected: List<String>) {
         val id = "folder:" + java.util.UUID.randomUUID()
         folders = folders + HomeFolder(id, name.trim().ifEmpty { "文件夹" }.take(16), selected)

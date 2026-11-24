@@ -25,6 +25,7 @@ import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.togetherWith
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.spring
@@ -124,7 +125,8 @@ private fun CloudHeader(
     calendarPermission: Boolean,
     onSearch: () -> Unit,
     onWeather: () -> Unit,
-    onCalendar: () -> Unit
+    onCalendar: () -> Unit,
+    onSettings: () -> Unit
 ) {
     val motion = LocalLauncherMotionEnabled.current
     val compactCards = tight || !landscape
@@ -134,16 +136,22 @@ private fun CloudHeader(
     if (landscape) {
         Row(Modifier.fillMaxWidth().height(if (tight) 124.dp else 164.dp), horizontalArrangement = Arrangement.spacedBy(28.dp), verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) {
+                Text(now.format(DateTimeFormatter.ofPattern("HH:mm")), color = Color.White,
+                    fontSize = if (tight) 38.sp else 48.sp, lineHeight = if (tight) 44.sp else 54.sp,
+                    fontWeight = FontWeight.Light)
                 Text(date, color = Color.White.copy(alpha = .88f), fontSize = 14.sp)
-                Text("每一天，都有新风景。", color = Color.White, fontSize = if (tight) 22.sp else 24.sp, fontWeight = FontWeight.Medium)
+                Row(Modifier.padding(top = 8.dp), verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 Surface(onClick = onSearch, shape = RoundedCornerShape(24.dp), color = Color.White.copy(alpha = .18f)) {
                     Row(Modifier.padding(horizontal = 16.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
                         Text("⌕", color = Color.White, fontSize = 19.sp); Spacer(Modifier.width(9.dp))
                         Text("搜索应用", color = Color.White.copy(alpha = .92f), fontSize = 12.sp)
                     }
                 }
+                HomeToolbarAction("桌面设置", R.drawable.ic_toolbar_settings, onSettings)
+                }
             }
-            Row(Modifier.fillMaxWidth(.45f), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+            Row(Modifier.fillMaxWidth(.54f), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
                 AnimatedVisibility(
                     visibleState = weatherEntrance,
                     modifier = Modifier.weight(1.05f),
@@ -159,10 +167,16 @@ private fun CloudHeader(
         }
     } else {
         Column(Modifier.fillMaxWidth().padding(top = 8.dp, bottom = 6.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            Text(date, color = Color.White.copy(alpha = .84f), fontSize = 14.sp)
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                Text("每一天，都有新风景。", Modifier.weight(1f), color = Color.White, fontSize = 23.sp, fontWeight = FontWeight.Medium)
-                TextButton(onClick = onSearch) { Text("⌕", color = Color.White, fontSize = 22.sp) }
+                Column(Modifier.weight(1f)) {
+                    Text(now.format(DateTimeFormatter.ofPattern("HH:mm")), color = Color.White, fontSize = if (tight) 32.sp else 40.sp,
+                        fontWeight = FontWeight.Light)
+                    Text(date, color = Color.White.copy(alpha = .84f), fontSize = 13.sp)
+                }
+                IconButton(onClick = onSearch, modifier = Modifier.semantics { contentDescription = "搜索应用" }) {
+                    Text("⌕", color = Color.White, fontSize = 22.sp)
+                }
+                HomeToolbarAction("桌面设置", R.drawable.ic_toolbar_settings, onSettings)
             }
             Row(Modifier.fillMaxWidth().height(if (tight) 96.dp else 132.dp), horizontalArrangement = Arrangement.spacedBy(14.dp)) {
                 AnimatedVisibility(
@@ -238,12 +252,15 @@ private fun LauncherHomeContent(model: LauncherModel, homeRequest: Int, widgetHo
     var folderName by rememberSaveable { mutableStateOf("") }
     var folderMembers by rememberSaveable { mutableStateOf(listOf<String>()) }
     var deleteTarget by rememberSaveable { mutableStateOf<String?>(null) }
+    var removeFromHomeTarget by rememberSaveable { mutableStateOf<String?>(null) }
     var draggingId by remember { mutableStateOf<String?>(null) }
     var dragPoint by remember { mutableStateOf<Offset?>(null) }
     var lastDropTarget by remember { mutableStateOf<String?>(null) }
     var pagerBounds by remember { mutableStateOf<Rect?>(null) }
     var dockBounds by remember { mutableStateOf<Rect?>(null) }
     var dragOverDock by remember { mutableStateOf(false) }
+    var dragOverFolder by remember { mutableStateOf<String?>(null) }
+    var folderDropVisual by remember { mutableStateOf<FolderDropVisual?>(null) }
     var pagerCoordinates by remember { mutableStateOf<LayoutCoordinates?>(null) }
     var rootCoordinates by remember { mutableStateOf<LayoutCoordinates?>(null) }
     var autoPageTarget by remember { mutableIntStateOf(-1) }
@@ -269,12 +286,15 @@ private fun LauncherHomeContent(model: LauncherModel, homeRequest: Int, widgetHo
         }
     }
     val tileBounds = remember { mutableStateMapOf<String, androidx.compose.ui.geometry.Rect>() }
+    val folderIconBounds = remember { mutableStateMapOf<String, Rect>() }
+    val dragHaptics = LocalHapticFeedback.current
     var now by remember { mutableStateOf(LocalDateTime.now()) }
     val appMap = remember(model.apps) { model.apps.associateBy { it.id } }
     val folderMap = remember(model.folders) { model.folders.associateBy { it.id } }
     val pages = HomeLayout.pageCount(model.home.size)
     val pager = rememberPagerState(pageCount = { pages })
     val edgeThresholdPx = with(androidx.compose.ui.platform.LocalDensity.current) { 92.dp.toPx() }
+    val folderDropPaddingPx = with(androidx.compose.ui.platform.LocalDensity.current) { 10.dp.toPx() }
     val colors = palettes[model.palette.coerceIn(palettes.indices)].mapIndexed { index, color ->
         animateColorAsState(color, tween(if (motion) 360 else 0, easing = LauncherMotion.easeOut), label = "wallpaper-color-$index").value
     }
@@ -285,12 +305,30 @@ private fun LauncherHomeContent(model: LauncherModel, homeRequest: Int, widgetHo
     suspend fun goToPage(page: Int) {
         pager.animateScrollToPage(page.coerceIn(0, pages - 1), animationSpec = LauncherMotion.page(motion))
     }
+    fun folderTargetAt(point: Offset, appId: String): String? {
+        if (model.apps.none { it.id == appId } || pager.isScrollInProgress) return null
+        val visible = model.home.drop(pager.currentPage * HomeLayout.PAGE_SIZE).take(HomeLayout.PAGE_SIZE)
+        return visible.firstOrNull { id ->
+            id != appId && model.folders.any { it.id == id } && folderIconBounds[id]?.inflate(folderDropPaddingPx)?.contains(point) == true
+        }
+    }
     fun endDrag(commit: Boolean = true) {
         val id = draggingId
+        val folderId = if (id != null && !dragOverDock) dragPoint?.let { folderTargetAt(it, id) } else null
         if (commit && dragOverDock && id != null) {
             if (model.moveHomeToDock(id)) message("已移至常驻栏")
             else if (id.startsWith("folder:")) message("文件夹不能加入常驻栏")
             else message("常驻栏已满，请先移出一个应用")
+        } else if (commit && id != null && folderId != null) {
+            val app = model.apps.firstOrNull { it.id == id }
+            val from = dragPoint
+            val to = folderIconBounds[folderId]?.center
+            if (model.moveHomeIntoFolder(id, folderId)) {
+                if (motion && app != null && from != null && to != null) {
+                    folderDropVisual = FolderDropVisual(app, from, to)
+                }
+                message("已移入${folderMap[folderId]?.name ?: "文件夹"}")
+            }
         }
         autoPageJob?.cancel()
         autoPageJob = null
@@ -299,12 +337,26 @@ private fun LauncherHomeContent(model: LauncherModel, homeRequest: Int, widgetHo
         dragPoint = null
         lastDropTarget = null
         dragOverDock = false
+        dragOverFolder = null
     }
     fun handleDrag(rootPoint: Offset) {
         val id = draggingId ?: return
         dragPoint = rootPoint
         dragOverDock = dockBounds?.contains(rootPoint) == true
         if (dragOverDock) {
+            dragOverFolder = null
+            autoPageJob?.cancel()
+            autoPageJob = null
+            autoPageTarget = -1
+            lastDropTarget = null
+            return
+        }
+        val folderId = folderTargetAt(rootPoint, id)
+        if (dragOverFolder != folderId) {
+            dragOverFolder = folderId
+            if (folderId != null) dragHaptics.performHapticFeedback(HapticFeedbackType.LongPress)
+        }
+        if (folderId != null) {
             autoPageJob?.cancel()
             autoPageJob = null
             autoPageTarget = -1
@@ -313,7 +365,9 @@ private fun LauncherHomeContent(model: LauncherModel, homeRequest: Int, widgetHo
         }
         val visibleMembers = model.home.drop(pager.currentPage * HomeLayout.PAGE_SIZE).take(HomeLayout.PAGE_SIZE).toSet()
         val over = tileBounds.entries.firstOrNull { it.key != id && it.key in visibleMembers && it.value.contains(rootPoint) }?.key
-        if (over != null && over != lastDropTarget) {
+        // Keep a folder still while an app approaches its icon; swapping the
+        // entire tile here would move the intended drop target out of the way.
+        if (over != null && over != lastDropTarget && !(!id.startsWith("folder:") && over.startsWith("folder:"))) {
             model.swap(id, over)
             lastDropTarget = over
         }
@@ -336,6 +390,11 @@ private fun LauncherHomeContent(model: LauncherModel, homeRequest: Int, widgetHo
                 autoPageTarget = -1
             }
         }
+    }
+    val currentHandleDrag by rememberUpdatedState<(Offset) -> Unit>({ point -> handleDrag(point) })
+    val currentEndDrag by rememberUpdatedState<(Boolean) -> Unit>({ commit -> endDrag(commit) })
+    LaunchedEffect(editing, overlay, homeRequest) {
+        if (!editing || overlay.isNotEmpty()) endDrag(commit = false)
     }
     fun launch(app: LauncherApp, source: AppLaunchSource? = null) {
         runCatching {
@@ -368,8 +427,8 @@ private fun LauncherHomeContent(model: LauncherModel, homeRequest: Int, widgetHo
         val app = model.apps.firstOrNull { it.id == id }
         val folder = model.folders.firstOrNull { it.id == id }
         val entries = buildList {
-            if (app != null) {
-                add(IconMenuAction("移除", { deleteTarget = id }, true))
+            if (app != null && id in model.home) {
+                add(IconMenuAction("移除", { removeFromHomeTarget = id }, true))
             }
             if (app != null) {
                 add(IconMenuAction("应用信息", {
@@ -439,18 +498,16 @@ private fun LauncherHomeContent(model: LauncherModel, homeRequest: Int, widgetHo
             val tight = maxHeight < 500.dp
             val side = if (maxWidth < 480.dp) 16.dp else if (landscape) 40.dp else 28.dp
             Column(Modifier.fillMaxSize().padding(horizontal = side)) {
+                AnimatedVisibility(visible = editing, enter = expandVertically(tween(if (motion) 220 else 0)) + fadeIn(tween(if (motion) 160 else 0)),
+                    exit = shrinkVertically(tween(if (motion) 180 else 0)) + fadeOut(tween(if (motion) 100 else 0))) {
                 Row(Modifier.fillMaxWidth().height(48.dp), verticalAlignment = Alignment.CenterVertically) {
-                    if (editing) {
-                        Text("编辑桌面 · 长按拖动图标", color = Color.White.copy(alpha = .84f), fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
-                    } else Spacer(Modifier.weight(1f))
-                    if (editing) {
+                        Text(if (dragOverFolder != null) "松开移入「${folderMap[dragOverFolder]?.name.orEmpty()}」" else "编辑桌面 · 长按拖动图标", color = Color.White.copy(alpha = .84f), fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
                         HomeToolbarAction("新建文件夹", R.drawable.ic_toolbar_folder_add) { beginFolder() }
                         HomeToolbarAction("小组件", R.drawable.ic_toolbar_widgets) { overlay = "widgets" }
-                    }
-                    HomeToolbarAction(if (editing) "完成编辑" else "编辑桌面",
-                        if (editing) R.drawable.ic_toolbar_done else R.drawable.ic_toolbar_edit) { editing = !editing }
-                    HomeToolbarAction("桌面设置", R.drawable.ic_toolbar_settings) { overlay = "settings" }
+                    HomeToolbarAction("完成编辑", R.drawable.ic_toolbar_done) { editing = false }
                 }
+                }
+                Spacer(Modifier.height(if (tight) 12.dp else 24.dp))
                 CloudHeader(
                     now = now,
                     landscape = landscape,
@@ -466,6 +523,7 @@ private fun LauncherHomeContent(model: LauncherModel, homeRequest: Int, widgetHo
                     calendarPermission = calendarPermission,
                     onSearch = { overlay = "drawer" },
                     onWeather = { overlay = "weather" },
+                    onSettings = { overlay = "settings" },
                     onCalendar = {
                         if (!calendarPermission) requestCalendarPermission.launch(Manifest.permission.READ_CALENDAR)
                         else {
@@ -511,27 +569,39 @@ private fun LauncherHomeContent(model: LauncherModel, homeRequest: Int, widgetHo
                                             pagerCoordinates = it
                                             pagerBounds = it.boundsInRoot()
                                         }
-                                        .then(if (editing) Modifier.pointerInput(editing, pages) {
+                                        .then(if (editing) Modifier.pointerInput(editing, pages, landscape) {
                                             detectDragGesturesAfterLongPress(
                                                 onDragStart = { localPoint ->
                                                     val rootPoint = pagerCoordinates?.localToRoot(localPoint) ?: localPoint
-                                                    tileBounds.entries.firstOrNull { it.value.contains(rootPoint) }?.key?.let { id ->
+                                                    val visible = model.home.drop(pager.currentPage * HomeLayout.PAGE_SIZE).take(HomeLayout.PAGE_SIZE)
+                                                    tileBounds.entries.firstOrNull { it.key in visible && it.value.contains(rootPoint) }?.key?.let { id ->
                                                         autoPageJob?.cancel()
                                                         draggingId = id
                                                         dragPoint = rootPoint
                                                         lastDropTarget = null
                                                         dragOverDock = dockBounds?.contains(rootPoint) == true
+                                                        dragOverFolder = null
                                                     }
                                                 },
                                                 onDrag = { change, _ ->
                                                     val rootPoint = pagerCoordinates?.localToRoot(change.position) ?: change.position
-                                                    if (draggingId != null) handleDrag(rootPoint)
+                                                    if (draggingId != null) currentHandleDrag(rootPoint)
                                                     change.consume()
                                                 },
-                                                onDragEnd = { endDrag(commit = true) },
-                                                onDragCancel = { endDrag(commit = false) }
+                                                onDragEnd = { currentEndDrag(true) },
+                                                onDragCancel = { currentEndDrag(false) }
                                             )
-                                        } else Modifier)
+                                        } else Modifier.pointerInput(pages, landscape) {
+                                            detectTapGestures(onLongPress = { localPoint ->
+                                                val point = pagerCoordinates?.localToRoot(localPoint) ?: localPoint
+                                                val visible = model.home.drop(pager.currentPage * HomeLayout.PAGE_SIZE).take(HomeLayout.PAGE_SIZE)
+                                                val onIcon = visible.any { tileBounds[it]?.contains(point) == true }
+                                                if (!onIcon && overlay.isEmpty()) {
+                                                    dragHaptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                                                    editing = true
+                                                }
+                                            })
+                                        })
                                 ) {
                                     HorizontalPager(
                                         state = pager, userScrollEnabled = !editing,
@@ -564,6 +634,8 @@ private fun LauncherHomeContent(model: LauncherModel, homeRequest: Int, widgetHo
                                                     contentAlignment = Alignment.Center
                                                 ) {
                                                     HomeTile(id, appMap, folderMap, iconSize, editing, dragging = draggingId == id,
+                                                        folderDropTarget = dragOverFolder == id,
+                                                        onFolderPositioned = { bounds -> folderIconBounds[id] = bounds },
                                                         onDelete = { deleteTarget = id },
                                                         onClick = { source ->
                                                             if (id.startsWith("folder:")) showFolder(id)
@@ -649,8 +721,12 @@ private fun LauncherHomeContent(model: LauncherModel, homeRequest: Int, widgetHo
             folder = folderMap[draggingId!!],
             folderApps = appMap,
             point = previewPoint,
-            size = 68.dp
+            size = 68.dp,
+            overFolder = dragOverFolder != null
         )
+    }
+    folderDropVisual?.let { visual ->
+        key(visual) { FolderDropAnimation(visual) { if (folderDropVisual == visual) folderDropVisual = null } }
     }
 
     val openFolder = folderMap[target]?.takeIf { overlay == "folder" }
@@ -734,6 +810,21 @@ private fun LauncherHomeContent(model: LauncherModel, homeRequest: Int, widgetHo
     }
     }
 
+    removeFromHomeTarget?.let { id ->
+        val app = appMap[id]
+        if (app != null) {
+            GlassRemoveConfirmation(
+                app = app,
+                onCancel = { removeFromHomeTarget = null },
+                onConfirm = {
+                    model.removeHome(id)
+                    removeFromHomeTarget = null
+                    message("已从桌面移除")
+                }
+            )
+        }
+    }
+
     // Keep this dialog outside LauncherOverlay: that host is only composed while
     // another full-screen overlay is visible, while edit badges are always usable.
     deleteTarget?.let { id ->
@@ -789,7 +880,7 @@ private fun HomeToolbarAction(label: String, icon: Int, onClick: () -> Unit) {
     ) {
         IconButton(onClick = onClick, modifier = Modifier.size(48.dp)) {
             Icon(painterResource(icon), contentDescription = label,
-                tint = Color.White.copy(alpha = .94f), modifier = Modifier.size(24.dp))
+                tint = Color.White.copy(alpha = .86f), modifier = Modifier.size(21.dp))
         }
     }
 }
@@ -802,6 +893,8 @@ private fun HomeTile(
     size: Dp,
     editing: Boolean,
     dragging: Boolean = false,
+    folderDropTarget: Boolean = false,
+    onFolderPositioned: (Rect) -> Unit = {},
     onDelete: () -> Unit,
     entranceDelayMs: Int = 0,
     onClick: (AppLaunchSource?) -> Unit,
@@ -813,6 +906,9 @@ private fun HomeTile(
     val app = apps[id]
     if (app != null) AppTile(app, size, onClick, editing, dragging, onDelete, onPositioned, entranceDelayMs, animateEntrance = false, homeIcon = true)
     else folders[id]?.let { folder ->
+        val motion = LocalLauncherMotionEnabled.current
+        val receive by animateFloatAsState(if (folderDropTarget) 1f else 0f,
+            LauncherMotion.layer(motion), label = "folder-drop-focus")
         val launchAnchor = rememberAppLaunchAnchor(folder.apps, priority = 1)
         var coordinates by remember { mutableStateOf<LayoutCoordinates?>(null) }
         val interaction = remember(id) { MutableInteractionSource() }
@@ -834,11 +930,22 @@ private fun HomeTile(
                         .padding(5.dp),
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
-                    Box(Modifier.size(size).then(iconModifier).onGloballyPositioned { launchAnchor.coordinates = it }.homeReturnLanding(launchAnchor)) {
-                        FolderIcon(folder, apps, Modifier.fillMaxSize())
+                    Box(Modifier.size(size).then(iconModifier).onGloballyPositioned {
+                        launchAnchor.coordinates = it
+                        onFolderPositioned(it.boundsInRoot())
+                    }.homeReturnLanding(launchAnchor)) {
+                        Box(Modifier.fillMaxSize().graphicsLayer {
+                            scaleX = 1f + .14f * receive
+                            scaleY = scaleX
+                        }.border(2.dp, Color.White.copy(alpha = .95f * receive), RoundedCornerShape(23.dp))) {
+                            FolderIcon(folder, apps, Modifier.fillMaxSize())
+                        }
                         if (editing) EditBadge(Modifier.align(Alignment.TopStart), onDelete)
                     }
-                    Text(folder.name, color = Color.White, fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = 8.dp))
+                    Text(if (folderDropTarget) "松开移入" else folder.name, color = Color.White, fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.padding(top = 8.dp).semantics {
+                            if (folderDropTarget) contentDescription = "松开移入${folder.name}"
+                        })
                 }
             }
         }
@@ -871,10 +978,11 @@ private fun DragPreview(
     folder: HomeFolder?,
     folderApps: Map<String, LauncherApp>,
     point: Offset,
-    size: Dp
+    size: Dp,
+    overFolder: Boolean = false
 ) {
     val density = androidx.compose.ui.platform.LocalDensity.current
-    val scale by animateFloatAsState(1.08f, spring(stiffness = 520f, dampingRatio = 0.74f), label = "drag-preview-scale")
+    val scale by animateFloatAsState(if (overFolder) .84f else 1.08f, LauncherMotion.layer(LocalLauncherMotionEnabled.current), label = "drag-preview-scale")
     val alpha by animateFloatAsState(1f, tween(120), label = "drag-preview-alpha")
     Box(
         Modifier
@@ -912,6 +1020,29 @@ private fun DragPreview(
             }
         }
     }
+}
+
+private data class FolderDropVisual(val app: LauncherApp, val from: Offset, val to: Offset)
+
+@Composable
+private fun FolderDropAnimation(visual: FolderDropVisual, onFinished: () -> Unit) {
+    val progress = remember { Animatable(0f) }
+    val finished by rememberUpdatedState(onFinished)
+    val motion = LocalLauncherMotionEnabled.current
+    val size = 68.dp
+    LaunchedEffect(visual) {
+        progress.animateTo(1f, tween(if (motion) 240 else 0, easing = LauncherMotion.easeOut))
+        finished()
+    }
+    Image(visual.app.icon.asImageBitmap(), null,
+        Modifier.size(size).zIndex(25f).graphicsLayer {
+            val p = progress.value
+            translationX = visual.from.x + (visual.to.x - visual.from.x) * p - size.toPx() / 2
+            translationY = visual.from.y + (visual.to.y - visual.from.y) * p - size.toPx() / 2
+            scaleX = .84f * (1f - .75f * p)
+            scaleY = scaleX
+            alpha = 1f - p
+        }.clip(RoundedCornerShape(22.dp)))
 }
 
 @Composable
