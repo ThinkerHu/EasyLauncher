@@ -68,7 +68,7 @@ internal fun LauncherOverlay(
     // Full-screen pages share the activity's edge-to-edge window. This avoids
     // vendor dialog windows overriding icon contrast or exposing the wallpaper
     // below the gesture area, and lets IME insets resize the city results.
-    if (overlay == "weather" || overlay == "settings") {
+    if (overlay in setOf("weather", "settings", "widgets")) {
         DisposableEffect(hostWindow) {
             val bars = hostWindow?.let { WindowInsetsControllerCompat(it, it.decorView) }
             val oldStatus = bars?.isAppearanceLightStatusBars

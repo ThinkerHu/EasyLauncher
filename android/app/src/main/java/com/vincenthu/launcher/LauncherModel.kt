@@ -54,6 +54,7 @@ class LauncherModel(application: Application) : AndroidViewModel(application) {
     var folders by mutableStateOf(readFolders()); private set
     var widgets by mutableStateOf(readWidgets()); private set
     var palette by mutableIntStateOf(preferences.getInt("palette", 0)); private set
+    var calendarVisible by mutableStateOf(preferences.getBoolean("calendarVisible", true)); private set
     var weatherVisible by mutableStateOf(preferences.getBoolean("weatherVisible", true)); private set
     var reduceMotion by mutableStateOf(preferences.getBoolean("reduceMotion", false)); private set
     var weatherWallpaper by mutableStateOf(preferences.getBoolean("weatherWallpaper", true)); private set
@@ -224,6 +225,7 @@ class LauncherModel(application: Application) : AndroidViewModel(application) {
         save()
     }
     fun choosePalette(value: Int) { palette = value; save() }
+    fun updateCalendarVisible(value: Boolean) { calendarVisible = value; save() }
     fun toggleWeather() { weatherVisible = !weatherVisible; save() }
     fun updateReduceMotion(value: Boolean) { reduceMotion = value; save() }
     fun updateWeatherWallpaper(value: Boolean) { weatherWallpaper = value; save() }
@@ -332,6 +334,7 @@ class LauncherModel(application: Application) : AndroidViewModel(application) {
                 widgets.forEach { widget -> put(JSONObject().put("appWidgetId", widget.appWidgetId).put("provider", widget.provider)) }
             }.toString())
             putInt("palette", palette).putBoolean("weatherVisible", weatherVisible)
+            putBoolean("calendarVisible", calendarVisible)
             putBoolean("reduceMotion", reduceMotion)
             putBoolean("weatherWallpaper", weatherWallpaper)
             putString("recentAppIds", JSONArray(recentAppIds).toString())

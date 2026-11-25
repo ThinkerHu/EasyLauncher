@@ -53,6 +53,36 @@ internal fun GlassRemoveConfirmation(
     onCancel: () -> Unit,
     onConfirm: () -> Unit
 ) {
+    GlassDesktopRemovalConfirmation(
+        identity = app.id,
+        title = "从桌面移除“${app.label}”？",
+        description = "应用仍保留在设备上，可从应用库再次添加到桌面。",
+        onCancel = onCancel,
+        onConfirm = onConfirm,
+        preview = { Image(app.icon.asImageBitmap(), null, Modifier.size(38.dp).clip(RoundedCornerShape(11.dp))) }
+    )
+}
+
+@Composable
+internal fun GlassDesktopRemovalConfirmation(
+    identity: String,
+    title: String,
+    description: String,
+    onCancel: () -> Unit,
+    onConfirm: () -> Unit,
+    preview: @Composable () -> Unit = {
+        androidx.compose.foundation.Canvas(Modifier.size(26.dp)) {
+            val gap = 4.dp.toPx()
+            val edge = (size.width - gap) / 2
+            for (x in 0..1) for (y in 0..1) {
+                drawRoundRect(Color(0xFF526E80),
+                    topLeft = androidx.compose.ui.geometry.Offset(x * (edge + gap), y * (edge + gap)),
+                    size = androidx.compose.ui.geometry.Size(edge, edge),
+                    cornerRadius = androidx.compose.ui.geometry.CornerRadius(3.dp.toPx()))
+            }
+        }
+    }
+) {
     val motion = LocalLauncherMotionEnabled.current
     val visibility = remember { MutableTransitionState(false) }
     var backdrop by remember { mutableStateOf<Bitmap?>(null) }
@@ -73,7 +103,7 @@ internal fun GlassRemoveConfirmation(
         visibility.targetState = false
     }
 
-    LaunchedEffect(app.id) {
+    LaunchedEffect(identity) {
         backdrop = host?.let { captureIconMenuBackdrop(it) }
         if (!closing) visibility.targetState = true
     }
@@ -153,16 +183,16 @@ internal fun GlassRemoveConfirmation(
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
                 Box(Modifier.size(54.dp).background(Color(0xFF526E80).copy(alpha = .12f), CircleShape), contentAlignment = Alignment.Center) {
-                    Image(app.icon.asImageBitmap(), null, Modifier.size(38.dp).clip(RoundedCornerShape(11.dp)))
+                    preview()
                 }
                 Text(
-                    "从桌面移除“${app.label}”？",
+                    title,
                     Modifier.fillMaxWidth().padding(top = 18.dp),
                     color = Color(0xFF203A4A), fontSize = 19.sp, lineHeight = 26.sp,
                     fontWeight = FontWeight.SemiBold, textAlign = TextAlign.Center
                 )
                 Text(
-                    "应用仍保留在设备上，可从应用库再次添加到桌面。",
+                    description,
                     Modifier.fillMaxWidth().padding(top = 10.dp),
                     color = Color(0xFF526B79), fontSize = 14.sp, lineHeight = 21.sp, textAlign = TextAlign.Center
                 )

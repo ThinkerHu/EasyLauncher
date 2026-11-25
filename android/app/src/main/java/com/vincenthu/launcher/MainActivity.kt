@@ -18,7 +18,8 @@ import androidx.core.content.ContextCompat
 
 class MainActivity : ComponentActivity() {
     private val model by viewModels<LauncherModel>()
-    private val widgetHost by lazy { WidgetHostController(this, model) }
+    private var widgetSavedState: Bundle? = null
+    private val widgetHost by lazy { WidgetHostController(this, model, widgetSavedState) }
     private val homeRequest = mutableIntStateOf(0)
     internal val homeReturnAnimation = HomeReturnAnimation(this)
     private val packageReceiver = object : BroadcastReceiver() {
@@ -27,6 +28,7 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        widgetSavedState = savedInstanceState?.getBundle("widget-pending")
         updateDesktopSystemBars(night = weatherWallpaperScene(model.weatherState, model.weatherWallpaper, System.currentTimeMillis())?.isDay == false)
         ContextCompat.registerReceiver(this, packageReceiver, IntentFilter().apply {
             addAction(Intent.ACTION_PACKAGE_ADDED); addAction(Intent.ACTION_PACKAGE_REMOVED)
@@ -66,5 +68,13 @@ class MainActivity : ComponentActivity() {
             homeRequest.intValue++
         }
     }
-    override fun onDestroy() { widgetHost.cancelPending(); unregisterReceiver(packageReceiver); super.onDestroy() }
+    override fun onSaveInstanceState(outState: Bundle) {
+        outState.putBundle("widget-pending", widgetHost.saveState())
+        super.onSaveInstanceState(outState)
+    }
+    override fun onDestroy() {
+        if (isFinishing) widgetHost.cancelPending()
+        unregisterReceiver(packageReceiver)
+        super.onDestroy()
+    }
 }

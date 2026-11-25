@@ -92,7 +92,6 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.ui.zIndex
 import androidx.core.net.toUri
 import kotlinx.coroutines.Dispatchers
@@ -106,7 +105,6 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
 import java.util.Locale
-import kotlin.math.absoluteValue
 import kotlin.math.roundToInt
 
 @Composable
@@ -115,6 +113,10 @@ private fun CloudHeader(
     landscape: Boolean,
     tight: Boolean,
     weatherVisible: Boolean,
+    calendarVisible: Boolean,
+    editing: Boolean,
+    onRemoveWeather: () -> Unit,
+    onRemoveCalendar: () -> Unit,
     weatherState: WeatherState,
     weatherCity: WeatherCity,
     weatherAnimating: Boolean,
@@ -130,7 +132,7 @@ private fun CloudHeader(
 ) {
     val motion = LocalLauncherMotionEnabled.current
     val compactCards = tight || !landscape
-    val cardEntrance = rememberEntranceState()
+    val cardEntrance = rememberEntranceState(visible = calendarVisible)
     val weatherEntrance = rememberEntranceState(visible = weatherVisible)
     val date = now.format(DateTimeFormatter.ofPattern("M月d日 · EEEE", Locale.CHINA))
     if (landscape) {
@@ -151,18 +153,26 @@ private fun CloudHeader(
                 HomeToolbarAction("桌面设置", R.drawable.ic_toolbar_settings, onSettings)
                 }
             }
-            Row(Modifier.fillMaxWidth(.54f), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+            if (weatherVisible || calendarVisible) Row(Modifier.fillMaxWidth(.54f), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
                 AnimatedVisibility(
                     visibleState = weatherEntrance,
                     modifier = Modifier.weight(1.05f),
                     enter = fadeIn(tween(if (motion) 320 else 0)) + slideInHorizontally(LauncherMotion.layer(motion)) { it / 10 },
                     exit = fadeOut(tween(if (motion) 160 else 0)) + scaleOut(tween(if (motion) 160 else 0), targetScale = if (motion) .98f else 1f)
-                ) { WeatherHomeCard(Modifier.fillMaxSize(), weatherState, weatherCity, weatherCities, weatherForCity, onWeatherCitySelected, weatherAnimating, onWeather) }
+                ) {
+                    EditableHeaderCard(editing, "移除天气卡片", onRemoveWeather) {
+                        WeatherHomeCard(Modifier.fillMaxSize(), weatherState, weatherCity, weatherCities, weatherForCity, onWeatherCitySelected, weatherAnimating && !editing, onWeather, interactionEnabled = !editing)
+                    }
+                }
                 AnimatedVisibility(
                     visibleState = cardEntrance,
                     modifier = Modifier.weight(1.1f),
                     enter = fadeIn(tween(if (motion) 320 else 0)) + slideInHorizontally(LauncherMotion.layer(motion)) { it / 12 }
-                ) { CloudCalendarCard(Modifier.fillMaxSize(), compactCards, now, calendarEvents, calendarPermission, onCalendar) }
+                ) {
+                    EditableHeaderCard(editing, "移除日历卡片", onRemoveCalendar) {
+                        CloudCalendarCard(Modifier.fillMaxSize(), compactCards, now, calendarEvents, calendarPermission, onCalendar)
+                    }
+                }
             }
         }
     } else {
@@ -178,20 +188,39 @@ private fun CloudHeader(
                 }
                 HomeToolbarAction("桌面设置", R.drawable.ic_toolbar_settings, onSettings)
             }
-            Row(Modifier.fillMaxWidth().height(if (tight) 96.dp else 132.dp), horizontalArrangement = Arrangement.spacedBy(14.dp)) {
+            if (weatherVisible || calendarVisible) Row(Modifier.fillMaxWidth().height(if (tight) 96.dp else 132.dp), horizontalArrangement = Arrangement.spacedBy(14.dp)) {
                 AnimatedVisibility(
                     visibleState = weatherEntrance,
                     modifier = Modifier.weight(1f),
                     enter = fadeIn(tween(if (motion) 320 else 0)) + slideInVertically(LauncherMotion.layer(motion)) { -it / 10 },
                     exit = fadeOut(tween(if (motion) 160 else 0)) + scaleOut(tween(if (motion) 160 else 0), targetScale = if (motion) .98f else 1f)
-                ) { WeatherHomeCard(Modifier.fillMaxSize(), weatherState, weatherCity, weatherCities, weatherForCity, onWeatherCitySelected, weatherAnimating, onWeather) }
+                ) {
+                    EditableHeaderCard(editing, "移除天气卡片", onRemoveWeather) {
+                        WeatherHomeCard(Modifier.fillMaxSize(), weatherState, weatherCity, weatherCities, weatherForCity, onWeatherCitySelected, weatherAnimating && !editing, onWeather, interactionEnabled = !editing)
+                    }
+                }
                 AnimatedVisibility(
                     visibleState = cardEntrance,
                     modifier = Modifier.weight(1.05f),
                     enter = fadeIn(tween(if (motion) 320 else 0)) + slideInVertically(LauncherMotion.layer(motion)) { -it / 12 }
-                ) { CloudCalendarCard(Modifier.fillMaxSize(), compactCards, now, calendarEvents, calendarPermission, onCalendar) }
+                ) {
+                    EditableHeaderCard(editing, "移除日历卡片", onRemoveCalendar) {
+                        CloudCalendarCard(Modifier.fillMaxSize(), compactCards, now, calendarEvents, calendarPermission, onCalendar)
+                    }
+                }
             }
         }
+    }
+}
+
+@Composable
+private fun EditableHeaderCard(editing: Boolean, description: String, onRemove: () -> Unit, content: @Composable () -> Unit) {
+    Box(Modifier.fillMaxSize()) {
+        content()
+        if (editing) {
+            Box(Modifier.matchParentSize().pointerInput(Unit) { detectTapGestures { } })
+        }
+        DesktopEditBadge(editing, description, Modifier.align(Alignment.TopStart).offset((-12).dp, (-12).dp), onRemove)
     }
 }
 
@@ -253,6 +282,8 @@ private fun LauncherHomeContent(model: LauncherModel, homeRequest: Int, widgetHo
     var folderMembers by rememberSaveable { mutableStateOf(listOf<String>()) }
     var deleteTarget by rememberSaveable { mutableStateOf<String?>(null) }
     var removeFromHomeTarget by rememberSaveable { mutableStateOf<String?>(null) }
+    var removeWidgetTarget by rememberSaveable { mutableStateOf<Int?>(null) }
+    var removeCardTarget by rememberSaveable { mutableStateOf<String?>(null) }
     var draggingId by remember { mutableStateOf<String?>(null) }
     var dragPoint by remember { mutableStateOf<Offset?>(null) }
     var lastDropTarget by remember { mutableStateOf<String?>(null) }
@@ -279,10 +310,18 @@ private fun LauncherHomeContent(model: LauncherModel, homeRequest: Int, widgetHo
     val uninstallLauncher = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) {
         model.refresh()
     }
+    var widgetAdding by rememberSaveable { mutableStateOf(false) }
+    var widgetAddError by rememberSaveable { mutableStateOf<String?>(null) }
     lateinit var widgetActivityLauncher: androidx.activity.result.ActivityResultLauncher<Intent>
     widgetActivityLauncher = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
-        widgetHost.handleActivityResult(result.resultCode, result.data) { intent ->
-            runCatching { widgetActivityLauncher.launch(intent) }.onFailure { message("无法打开系统小组件设置") }
+        runCatching {
+            widgetHost.handleActivityResult(result.resultCode, result.data) { intent -> widgetActivityLauncher.launch(intent) }
+        }.onSuccess { state ->
+            widgetAdding = state == WidgetBindResult.Pending
+            if (state == WidgetBindResult.Cancelled) widgetAddError = "已取消添加，你可以继续选择其他小组件。"
+        }.onFailure {
+            widgetAdding = false
+            widgetAddError = "无法打开应用的小组件配置，请重试或选择其他样式。"
         }
     }
     val tileBounds = remember { mutableStateMapOf<String, androidx.compose.ui.geometry.Rect>() }
@@ -291,8 +330,29 @@ private fun LauncherHomeContent(model: LauncherModel, homeRequest: Int, widgetHo
     var now by remember { mutableStateOf(LocalDateTime.now()) }
     val appMap = remember(model.apps) { model.apps.associateBy { it.id } }
     val folderMap = remember(model.folders) { model.folders.associateBy { it.id } }
-    val pages = HomeLayout.pageCount(model.home.size)
+    val appPages = HomeLayout.pageCount(model.home.size)
+    val homeWidgets = model.widgets
+    val widgetPages = remember(homeWidgets, widgetHost) {
+        WidgetGridLayout.pages(homeWidgets.map { widget ->
+            val info = widgetHost.info(widget)
+            WidgetGridItem(widget.appWidgetId, WidgetGridLayout.span(info?.minWidth ?: 0, info?.minHeight ?: 0))
+        })
+    }
+    val pages = appPages + widgetPages.size
     val pager = rememberPagerState(pageCount = { pages })
+    val widgetIds = homeWidgets.map { it.appWidgetId }
+    var previousWidgetIds by remember { mutableStateOf(widgetIds) }
+    LaunchedEffect(widgetIds, appPages, widgetPages) {
+        val added = widgetIds.firstOrNull { it !in previousWidgetIds }
+        previousWidgetIds = widgetIds
+        if (added != null) {
+            overlay = ""
+            widgetAdding = false
+            widgetAddError = null
+            editing = false
+            pager.animateScrollToPage(appPages + WidgetGridLayout.pageFor(widgetPages, added), animationSpec = LauncherMotion.page(motion))
+        } else if (pager.currentPage >= pages) pager.scrollToPage(pages - 1)
+    }
     val edgeThresholdPx = with(androidx.compose.ui.platform.LocalDensity.current) { 92.dp.toPx() }
     val folderDropPaddingPx = with(androidx.compose.ui.platform.LocalDensity.current) { 10.dp.toPx() }
     val colors = palettes[model.palette.coerceIn(palettes.indices)].mapIndexed { index, color ->
@@ -307,7 +367,7 @@ private fun LauncherHomeContent(model: LauncherModel, homeRequest: Int, widgetHo
     }
     fun folderTargetAt(point: Offset, appId: String): String? {
         if (model.apps.none { it.id == appId } || pager.isScrollInProgress) return null
-        val visible = model.home.drop(pager.currentPage * HomeLayout.PAGE_SIZE).take(HomeLayout.PAGE_SIZE)
+        val visible = HomeLayout.members(model.home, pager.currentPage)
         return visible.firstOrNull { id ->
             id != appId && model.folders.any { it.id == id } && folderIconBounds[id]?.inflate(folderDropPaddingPx)?.contains(point) == true
         }
@@ -363,7 +423,7 @@ private fun LauncherHomeContent(model: LauncherModel, homeRequest: Int, widgetHo
             lastDropTarget = null
             return
         }
-        val visibleMembers = model.home.drop(pager.currentPage * HomeLayout.PAGE_SIZE).take(HomeLayout.PAGE_SIZE).toSet()
+        val visibleMembers = HomeLayout.members(model.home, pager.currentPage).toSet()
         val over = tileBounds.entries.firstOrNull { it.key != id && it.key in visibleMembers && it.value.contains(rootPoint) }?.key
         // Keep a folder still while an app approaches its icon; swapping the
         // entire tile here would move the intended drop target out of the way.
@@ -375,7 +435,7 @@ private fun LauncherHomeContent(model: LauncherModel, homeRequest: Int, widgetHo
         if (bounds != null) {
             val nextPage = when {
                 rootPoint.x < bounds.left + edgeThresholdPx && pager.currentPage > 0 -> pager.currentPage - 1
-                rootPoint.x > bounds.right - edgeThresholdPx && pager.currentPage < pages - 1 -> pager.currentPage + 1
+                rootPoint.x > bounds.right - edgeThresholdPx && pager.currentPage < HomeLayout.pageCount(model.home.size) - 1 -> pager.currentPage + 1
                 else -> -1
             }
             if (nextPage >= 0 && nextPage != autoPageTarget) {
@@ -497,10 +557,11 @@ private fun LauncherHomeContent(model: LauncherModel, homeRequest: Int, widgetHo
             val landscape = maxWidth > maxHeight
             val tight = maxHeight < 500.dp
             val side = if (maxWidth < 480.dp) 16.dp else if (landscape) 40.dp else 28.dp
-            Column(Modifier.fillMaxSize().padding(horizontal = side)) {
-                AnimatedVisibility(visible = editing, enter = expandVertically(tween(if (motion) 220 else 0)) + fadeIn(tween(if (motion) 160 else 0)),
+            val desktopContentWidth = (maxWidth - side * 2).coerceAtLeast(0.dp)
+            Column(Modifier.fillMaxSize()) {
+                AnimatedVisibility(modifier = Modifier.align(Alignment.CenterHorizontally), visible = editing, enter = expandVertically(tween(if (motion) 220 else 0)) + fadeIn(tween(if (motion) 160 else 0)),
                     exit = shrinkVertically(tween(if (motion) 180 else 0)) + fadeOut(tween(if (motion) 100 else 0))) {
-                Row(Modifier.fillMaxWidth().height(48.dp), verticalAlignment = Alignment.CenterVertically) {
+                Row(Modifier.width(desktopContentWidth).height(48.dp), verticalAlignment = Alignment.CenterVertically) {
                         Text(if (dragOverFolder != null) "松开移入「${folderMap[dragOverFolder]?.name.orEmpty()}」" else "编辑桌面 · 长按拖动图标", color = Color.White.copy(alpha = .84f), fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
                         HomeToolbarAction("新建文件夹", R.drawable.ic_toolbar_folder_add) { beginFolder() }
                         HomeToolbarAction("小组件", R.drawable.ic_toolbar_widgets) { overlay = "widgets" }
@@ -508,49 +569,8 @@ private fun LauncherHomeContent(model: LauncherModel, homeRequest: Int, widgetHo
                 }
                 }
                 Spacer(Modifier.height(if (tight) 12.dp else 24.dp))
-                CloudHeader(
-                    now = now,
-                    landscape = landscape,
-                    tight = tight,
-                    weatherVisible = model.weatherVisible,
-                    weatherState = model.weatherState,
-                    weatherCity = model.weatherCity,
-                    weatherAnimating = overlay.isEmpty(),
-                    weatherCities = model.weatherCities,
-                    weatherForCity = model::weatherForCity,
-                    onWeatherCitySelected = model::chooseWeatherCity,
-                    calendarEvents = calendarEvents,
-                    calendarPermission = calendarPermission,
-                    onSearch = { overlay = "drawer" },
-                    onWeather = { overlay = "weather" },
-                    onSettings = { overlay = "settings" },
-                    onCalendar = {
-                        if (!calendarPermission) requestCalendarPermission.launch(Manifest.permission.READ_CALENDAR)
-                        else {
-                            val app = model.apps.firstOrNull { it.label.contains("日历") || it.packageName.contains("calendar") }
-                            if (app != null) launch(app) else message("未找到可打开的日历应用")
-                        }
-                    }
-                )
-                Spacer(Modifier.height(if (tight) 8.dp else 16.dp))
                 Box(Modifier.weight(1f).fillMaxWidth()) {
                     Column(Modifier.fillMaxSize()) {
-                        model.widgets.forEach { widget ->
-                            key(widget.appWidgetId) {
-                                AnimatedVisibility(visibleState = rememberEntranceState(), enter = fadeIn(tween(360)) + slideInVertically(tween(360)) { -it / 4 }) {
-                                    Surface(
-                                        shape = RoundedCornerShape(22.dp),
-                                        color = Color.White.copy(alpha = .72f),
-                                        modifier = Modifier.fillMaxWidth().height(if (landscape) 144.dp else 184.dp).padding(bottom = 10.dp)
-                                    ) {
-                                        Box(Modifier.fillMaxSize()) {
-                                            AndroidView(factory = { widgetHost.createView(widget) }, modifier = Modifier.fillMaxSize().padding(8.dp))
-                                            if (editing) TextButton(onClick = { widgetHost.remove(widget) }, modifier = Modifier.align(Alignment.TopEnd)) { Text("移除") }
-                                        }
-                                    }
-                                }
-                            }
-                        }
                         Box(Modifier.weight(1f).fillMaxWidth()) {
                             when {
                                 model.loading -> Column(Modifier.align(Alignment.Center), horizontalAlignment = Alignment.CenterHorizontally) {
@@ -558,10 +578,6 @@ private fun LauncherHomeContent(model: LauncherModel, homeRequest: Int, widgetHo
                                 }
                                 model.loadFailed -> Column(Modifier.align(Alignment.Center), horizontalAlignment = Alignment.CenterHorizontally) {
                                     Text("暂时无法读取应用", color = Ink); TextButton(onClick = model::refresh) { Text("重新加载") }
-                                }
-                                model.home.isEmpty() -> Column(Modifier.align(Alignment.Center), horizontalAlignment = Alignment.CenterHorizontally) {
-                                    Text("留一点空白，也很好。", color = Muted)
-                                    TextButton(onClick = { overlay = "drawer" }) { Text("从应用库添加应用") }
                                 }
                                 else -> Box(
                                     Modifier.fillMaxSize()
@@ -573,7 +589,7 @@ private fun LauncherHomeContent(model: LauncherModel, homeRequest: Int, widgetHo
                                             detectDragGesturesAfterLongPress(
                                                 onDragStart = { localPoint ->
                                                     val rootPoint = pagerCoordinates?.localToRoot(localPoint) ?: localPoint
-                                                    val visible = model.home.drop(pager.currentPage * HomeLayout.PAGE_SIZE).take(HomeLayout.PAGE_SIZE)
+                                                    val visible = HomeLayout.members(model.home, pager.currentPage)
                                                     tileBounds.entries.firstOrNull { it.key in visible && it.value.contains(rootPoint) }?.key?.let { id ->
                                                         autoPageJob?.cancel()
                                                         draggingId = id
@@ -594,7 +610,7 @@ private fun LauncherHomeContent(model: LauncherModel, homeRequest: Int, widgetHo
                                         } else Modifier.pointerInput(pages, landscape) {
                                             detectTapGestures(onLongPress = { localPoint ->
                                                 val point = pagerCoordinates?.localToRoot(localPoint) ?: localPoint
-                                                val visible = model.home.drop(pager.currentPage * HomeLayout.PAGE_SIZE).take(HomeLayout.PAGE_SIZE)
+                                                val visible = HomeLayout.members(model.home, pager.currentPage)
                                                 val onIcon = visible.any { tileBounds[it]?.contains(point) == true }
                                                 if (!onIcon && overlay.isEmpty()) {
                                                     dragHaptics.performHapticFeedback(HapticFeedbackType.LongPress)
@@ -604,51 +620,101 @@ private fun LauncherHomeContent(model: LauncherModel, homeRequest: Int, widgetHo
                                         })
                                 ) {
                                     HorizontalPager(
-                                        state = pager, userScrollEnabled = !editing,
+                                        state = pager, userScrollEnabled = draggingId == null,
                                         beyondViewportPageCount = 1,
                                         flingBehavior = PagerDefaults.flingBehavior(state = pager, snapAnimationSpec = LauncherMotion.page(motion)),
-                                        modifier = Modifier.fillMaxSize(), key = { it }
+                                        modifier = Modifier.fillMaxSize(), key = { page ->
+                                            if (page < appPages) "apps-$page"
+                                            else "widgets-${page - appPages}"
+                                        }
                                     ) { page ->
-                                    BoxWithConstraints(Modifier.fillMaxSize().graphicsLayer {
-                                        val pageOffset = if (motion) ((pager.currentPage - page) + pager.currentPageOffsetFraction).absoluteValue.coerceIn(0f, 1f) else 0f
-                                        scaleX = 1f - pageOffset * .012f
-                                        scaleY = 1f - pageOffset * .012f
-                                    }) {
-                                        val cols = HomeLayout.columns(landscape)
-                                        val rows = HomeLayout.rows(landscape)
-                                        val iconSize = minOf(if (landscape) 62.dp else 68.dp, (maxHeight / rows - 38.dp).coerceAtLeast(32.dp), (maxWidth / cols - 16.dp).coerceAtLeast(32.dp))
-                                        val members = model.home.drop(page * HomeLayout.PAGE_SIZE).take(HomeLayout.PAGE_SIZE)
-                                        val cellHeight = maxHeight / rows
-                                        LazyVerticalGrid(
-                                            columns = GridCells.Fixed(cols),
-                                            userScrollEnabled = false,
-                                            modifier = Modifier.fillMaxSize(),
-                                            horizontalArrangement = Arrangement.Center,
-                                            verticalArrangement = Arrangement.Top
-                                        ) {
-                                            items(members, key = { it }) { id ->
-                                                Box(
-                                                    Modifier.height(cellHeight).animateItem(
-                                                        placementSpec = spring(stiffness = 650f, dampingRatio = 0.82f)
-                                                    ),
-                                                    contentAlignment = Alignment.Center
-                                                ) {
-                                                    HomeTile(id, appMap, folderMap, iconSize, editing, dragging = draggingId == id,
-                                                        folderDropTarget = dragOverFolder == id,
-                                                        onFolderPositioned = { bounds -> folderIconBounds[id] = bounds },
-                                                        onDelete = { deleteTarget = id },
-                                                        onClick = { source ->
-                                                            if (id.startsWith("folder:")) showFolder(id)
-                                                            else appMap[id]?.let { launch(it, source) }
-                                                        },
-                                                        onDragStart = {},
-                                                        onDrag = {},
-                                                        onDragEnd = {},
-                                                        onPositioned = { bounds -> tileBounds[id] = bounds })
+                                        // Keep the pager edge-to-edge; each page owns its outer margins.
+                                        Box(Modifier.fillMaxSize()) {
+                                            Column(Modifier.width(desktopContentWidth).fillMaxHeight().align(Alignment.TopCenter)) {
+                                                if (page == 0) {
+                                                    CloudHeader(
+                                                        now = now,
+                                                        landscape = landscape,
+                                                        tight = tight,
+                                                        weatherVisible = model.weatherVisible,
+                                                        calendarVisible = model.calendarVisible,
+                                                        editing = editing,
+                                                        onRemoveWeather = { removeCardTarget = "weather" },
+                                                        onRemoveCalendar = { removeCardTarget = "calendar" },
+                                                        weatherState = model.weatherState,
+                                                        weatherCity = model.weatherCity,
+                                                        weatherAnimating = overlay.isEmpty() && pager.currentPage == 0,
+                                                        weatherCities = model.weatherCities,
+                                                        weatherForCity = model::weatherForCity,
+                                                        onWeatherCitySelected = model::chooseWeatherCity,
+                                                        calendarEvents = calendarEvents,
+                                                        calendarPermission = calendarPermission,
+                                                        onSearch = { overlay = "drawer" },
+                                                        onWeather = { overlay = "weather" },
+                                                        onSettings = { overlay = "settings" },
+                                                        onCalendar = {
+                                                            if (!calendarPermission) requestCalendarPermission.launch(Manifest.permission.READ_CALENDAR)
+                                                            else {
+                                                                val app = model.apps.firstOrNull { it.label.contains("日历") || it.packageName.contains("calendar") }
+                                                                if (app != null) launch(app) else message("未找到可打开的日历应用")
+                                                            }
+                                                        }
+                                                    )
+                                                    Spacer(Modifier.height(if (tight) 8.dp else 16.dp))
+                                                }
+                                                Box(Modifier.weight(1f).fillMaxWidth()) {
+                                                    val widgetPage = widgetPages.getOrNull(page - appPages)
+                                                    if (page >= appPages && widgetPage != null) {
+                                                        DesktopWidgetPage(
+                                                            page = widgetPage, widgets = homeWidgets,
+                                                            host = widgetHost, editing = editing,
+                                                            onEdit = { editing = true },
+                                                            onRemove = { removeWidgetTarget = it.appWidgetId }
+                                                        )
+                                                    } else {
+                                                        BoxWithConstraints(Modifier.fillMaxSize()) {
+                                                            val cols = HomeLayout.columns(landscape)
+                                                            val rows = HomeLayout.rows(landscape, page)
+                                                            val iconSize = minOf(if (landscape) 62.dp else 68.dp, (maxHeight / rows - 38.dp).coerceAtLeast(32.dp), (maxWidth / cols - 16.dp).coerceAtLeast(32.dp))
+                                                            val members = HomeLayout.members(model.home, page)
+                                                            val cellHeight = maxHeight / rows
+                                                            // Let the outer half-cells extend into the page margin so
+                                                            // icon edges line up with the header cards above them.
+                                                            val gridWidth = (maxWidth - iconSize) * cols / (cols - 1)
+                                                            LazyVerticalGrid(
+                                                                columns = GridCells.Fixed(cols),
+                                                                userScrollEnabled = false,
+                                                                modifier = Modifier.requiredWidth(gridWidth).fillMaxHeight(),
+                                                                horizontalArrangement = Arrangement.Center,
+                                                                verticalArrangement = Arrangement.Top
+                                                            ) {
+                                                                items(members, key = { it }) { id ->
+                                                                    Box(
+                                                                        Modifier.height(cellHeight).animateItem(
+                                                                            placementSpec = spring(stiffness = 650f, dampingRatio = 0.82f)
+                                                                        ),
+                                                                        contentAlignment = Alignment.Center
+                                                                    ) {
+                                                                        HomeTile(id, appMap, folderMap, iconSize, editing, dragging = draggingId == id,
+                                                                            folderDropTarget = dragOverFolder == id,
+                                                                            onFolderPositioned = { bounds -> folderIconBounds[id] = bounds },
+                                                                            onDelete = { deleteTarget = id },
+                                                                            onClick = { source ->
+                                                                                if (id.startsWith("folder:")) showFolder(id)
+                                                                                else appMap[id]?.let { launch(it, source) }
+                                                                            },
+                                                                            onDragStart = {},
+                                                                            onDrag = {},
+                                                                            onDragEnd = {},
+                                                                            onPositioned = { bounds -> tileBounds[id] = bounds })
+                                                                    }
+                                                                }
+                                                            }
+                                                        }
+                                                    }
                                                 }
                                             }
                                         }
-                                    }
                                     }
                                 }
                             }
@@ -680,7 +746,7 @@ private fun LauncherHomeContent(model: LauncherModel, homeRequest: Int, widgetHo
                             else -> "常驻栏已满"
                         }
                     } else null,
-                    modifier = Modifier.align(Alignment.CenterHorizontally).widthIn(max = 620.dp).padding(bottom = 12.dp)
+                    modifier = Modifier.align(Alignment.CenterHorizontally).widthIn(max = minOf(620.dp, desktopContentWidth)).padding(bottom = 12.dp)
                         .onGloballyPositioned { dockBounds = it.boundsInRoot() }
                 ) {
                     BoxWithConstraints {
@@ -780,31 +846,24 @@ private fun LauncherHomeContent(model: LauncherModel, homeRequest: Int, widgetHo
                 }.onFailure { message("请在系统设置中选择默认桌面") }
             }
         )
-        "widgets" -> HomeModal("添加系统小组件", { overlay = "" }) {
-            val providers = remember(widgetHost) { widgetHost.providers() }
-            Text("选择系统提供的小组件，绑定过程会由系统确认。", color = Muted, fontSize = 13.sp, modifier = Modifier.padding(bottom = 12.dp))
-            if (providers.isEmpty()) {
-                Text("当前设备没有可用的小组件。", color = Muted, modifier = Modifier.padding(20.dp))
-            } else {
-                LazyColumn(Modifier.weight(1f)) {
-                    items(providers, key = { it.provider.flattenToString() }) { provider ->
-                        val label = provider.loadLabel(context.packageManager).toString()
-                        Row(Modifier.fillMaxWidth().clickable {
-                            overlay = ""
-                            widgetHost.beginBind(provider) { intent ->
-                                runCatching { widgetActivityLauncher.launch(intent) }.onFailure { message("无法打开系统小组件设置") }
-                            }
-                        }.padding(vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
-                            Column(Modifier.weight(1f)) {
-                                Text(label, color = Ink, fontSize = 16.sp)
-                                Text(if (provider.configure != null) "需要完成一次配置" else "可直接添加", color = Muted, fontSize = 12.sp)
-                            }
-                            Text("添加 ›", color = Color(0xFF426D87), fontSize = 14.sp)
-                        }
-                    }
+        "widgets" -> WidgetPickerPage(
+            host = widgetHost,
+            adding = widgetAdding,
+            addError = widgetAddError,
+            onBack = { overlay = "" },
+            onAdd = { provider ->
+                widgetAdding = true
+                widgetAddError = null
+                runCatching {
+                    widgetHost.beginBind(provider) { intent -> widgetActivityLauncher.launch(intent) }
+                }.onSuccess { result ->
+                    widgetAdding = result == WidgetBindResult.Pending
+                }.onFailure {
+                    widgetAdding = false
+                    widgetAddError = "无法打开应用的小组件配置，请重试或选择其他样式。"
                 }
             }
-        }
+        )
         "weather" -> LauncherWeatherPage(model, onBack = { overlay = "" })
     }
     }
@@ -823,6 +882,34 @@ private fun LauncherHomeContent(model: LauncherModel, homeRequest: Int, widgetHo
                 }
             )
         }
+    }
+
+    removeWidgetTarget?.let { widgetId ->
+        model.widgets.firstOrNull { it.appWidgetId == widgetId }?.let { widget ->
+            GlassDesktopRemovalConfirmation(
+                identity = "widget-$widgetId",
+                title = "移除此小组件？",
+                description = "仅从桌面移除，稍后可在小组件中重新添加。",
+                onCancel = { removeWidgetTarget = null },
+                onConfirm = {
+                    widgetHost.remove(widget)
+                    removeWidgetTarget = null
+                    message("已移除小组件")
+                }
+            )
+        }
+    }
+    removeCardTarget?.let { card ->
+        GlassDesktopRemovalConfirmation(
+            identity = card,
+            title = if (card == "weather") "移除天气卡片？" else "移除日历卡片？",
+            description = "稍后可在桌面设置的「功能」中重新开启。",
+            onCancel = { removeCardTarget = null },
+            onConfirm = {
+                if (card == "weather") model.toggleWeather() else model.updateCalendarVisible(false)
+                removeCardTarget = null
+            }
+        )
     }
 
     // Keep this dialog outside LauncherOverlay: that host is only composed while
@@ -940,7 +1027,7 @@ private fun HomeTile(
                         }.border(2.dp, Color.White.copy(alpha = .95f * receive), RoundedCornerShape(23.dp))) {
                             FolderIcon(folder, apps, Modifier.fillMaxSize())
                         }
-                        if (editing) EditBadge(Modifier.align(Alignment.TopStart), onDelete)
+                        DesktopEditBadge(editing, "移除${folder.name}", Modifier.align(Alignment.TopStart).offset((-12).dp, (-12).dp), onDelete)
                     }
                     Text(if (folderDropTarget) "松开移入" else folder.name, color = Color.White, fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis,
                         modifier = Modifier.padding(top = 8.dp).semantics {
@@ -1092,7 +1179,7 @@ private fun AppTile(
             ) {
                 Box(Modifier.size(size).then(iconModifier).onGloballyPositioned { launchAnchor.coordinates = it }.homeReturnLanding(launchAnchor)) {
                     Image(app.icon.asImageBitmap(), "应用图标：" + app.label, Modifier.fillMaxSize().clip(RoundedCornerShape(22.dp)))
-                    if (editing) EditBadge(Modifier.align(Alignment.TopStart), onDelete)
+                    DesktopEditBadge(editing, "移除${app.label}", Modifier.align(Alignment.TopStart).offset((-12).dp, (-12).dp), onDelete)
                 }
                 Text(
                     app.label, color = labelColor, fontSize = 13.sp, textAlign = TextAlign.Center,
@@ -1100,22 +1187,6 @@ private fun AppTile(
                     modifier = Modifier.fillMaxWidth().padding(top = 8.dp)
                 )
             }
-        }
-    }
-}
-
-@Composable
-private fun EditBadge(modifier: Modifier = Modifier, onClick: () -> Unit) {
-    Box(
-        modifier.offset(x = (-5).dp, y = (-5).dp).size(28.dp)
-            .clip(CircleShape).background(Color(0xFFE6535B))
-            .border(2.dp, Color.White.copy(alpha = .96f), CircleShape)
-            .clickable(onClick = onClick)
-            .semantics { contentDescription = "删除" },
-        contentAlignment = Alignment.Center
-    ) {
-        Canvas(Modifier.size(12.dp)) {
-            drawLine(Color.White, Offset(0f, size.height / 2f), Offset(size.width, size.height / 2f), 2.dp.toPx())
         }
     }
 }
@@ -1468,10 +1539,10 @@ private fun SettingsSectionContent(
                 SettingsGroup("图标布局", "当前方向自动适配，旋转设备后会即时调整。") {
                     Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                         SettingsValueTile("每行图标", "${HomeLayout.columns(landscape)} 列", Modifier.weight(1f))
-                        SettingsValueTile("图标行数", "${HomeLayout.rows(landscape)} 行", Modifier.weight(1f))
-                        SettingsValueTile("每屏容量", "${HomeLayout.PAGE_SIZE} 个", Modifier.weight(1f))
+                        SettingsValueTile("其他页面", "${HomeLayout.rows(landscape, 1)} 行", Modifier.weight(1f))
+                        SettingsValueTile("首页 / 其他页", "${HomeLayout.FIRST_PAGE_SIZE} / ${HomeLayout.FULL_PAGE_SIZE} 个", Modifier.weight(1f))
                     }
-                    Text("横屏 7 列 × 2 行 · 竖屏 4 列 × 4 行", color = Muted, fontSize = 12.sp, modifier = Modifier.padding(top = 12.dp))
+                    Text("时间、天气和日历仅在首页显示。其他应用页使用完整网格：横屏 7 列 × 4 行，竖屏 4 列 × 7 行。", color = Muted, fontSize = 12.sp, modifier = Modifier.padding(top = 12.dp))
                 }
                 SettingsGroup("桌面整理", "快速整理主屏上的应用与内容。") {
                     SettingsActionRow("新建文件夹", "将常用应用归类到一起。", "›", onCreateFolder)
@@ -1487,7 +1558,8 @@ private fun SettingsSectionContent(
             }
             "功能" -> {
                 SettingsPageHeading("功能", "管理桌面信息卡片与快捷入口。")
-                SettingsGroup("信息卡片", "选择显示在桌面顶部的信息。") {
+                SettingsGroup("信息卡片", "选择显示在首页顶部的信息。") {
+                    SettingsToggleRow("日历卡片", "显示今天的日程安排。", model.calendarVisible, model::updateCalendarVisible)
                     SettingsToggleRow("天气卡片", "显示所选城市的天气信息。", model.weatherVisible, { model.toggleWeather() })
                     Text("当前城市：${model.weatherCity.name}", color = Muted, fontSize = 12.sp, modifier = Modifier.padding(start = 2.dp, top = 8.dp))
                 }

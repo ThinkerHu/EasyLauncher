@@ -153,7 +153,7 @@ internal fun WeatherArtwork(code: Int, isDay: Boolean, modifier: Modifier = Modi
 internal fun WeatherHomeCard(
     modifier: Modifier, state: WeatherState, city: WeatherCity, cities: List<WeatherCity>,
     weatherForCity: (WeatherCity) -> WeatherState, onCitySelected: (WeatherCity) -> Unit,
-    animate: Boolean, onClick: () -> Unit
+    animate: Boolean, onClick: () -> Unit, interactionEnabled: Boolean = true
 ) {
     val deck = cities.ifEmpty { listOf(city) }
     val pager = rememberPagerState(initialPage = deck.indexOfFirst { it.id == city.id }.coerceAtLeast(0), pageCount = { deck.size })
@@ -174,7 +174,7 @@ internal fun WeatherHomeCard(
         stateDescription = "${city.name}天气，第 ${pager.settledPage + 1} 个城市，共 ${deck.size} 个，上下滑动切换城市"
     }) {
         VerticalPager(
-            state = pager, modifier = Modifier.fillMaxSize(), userScrollEnabled = deck.size > 1,
+            state = pager, modifier = Modifier.fillMaxSize(), userScrollEnabled = interactionEnabled && deck.size > 1,
             beyondViewportPageCount = 1, key = { deck[it].id },
             flingBehavior = PagerDefaults.flingBehavior(state = pager, snapAnimationSpec = LauncherMotion.page(motion))
         ) { index ->

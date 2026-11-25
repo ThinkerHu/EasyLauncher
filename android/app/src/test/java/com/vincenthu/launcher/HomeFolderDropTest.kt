@@ -40,7 +40,7 @@ class HomeFolderDropTest {
     }
 
     @Test fun crossPageMovePreservesEveryOtherDesktopItemInOrder() {
-        val home = listOf(work.id) + (1..HomeLayout.PAGE_SIZE).map { "app$it/.Main" }
+        val home = listOf(work.id) + (1..HomeLayout.FIRST_PAGE_SIZE).map { "app$it/.Main" }
         val appId = home.last()
         assertEquals(2, HomeLayout.pageCount(home.size))
         val result = HomeFolderDrop.move(home, listOf(work), appId, work.id)!!
